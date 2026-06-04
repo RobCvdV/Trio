@@ -47,6 +47,22 @@ struct BolusInputView: View {
                         }
                     }
 
+                    if state.fatAmount > 0 {
+                        HStack {
+                            Text("Fat:").bold().font(.subheadline).padding(.leading)
+                            Text("\(state.fatAmount) g").font(.subheadline).foregroundStyle(Color.yellow)
+                            Spacer()
+                        }
+                    }
+
+                    if state.proteinAmount > 0 {
+                        HStack {
+                            Text("Protein:").bold().font(.subheadline).padding(.leading)
+                            Text("\(state.proteinAmount) g").font(.subheadline).foregroundStyle(Color.red)
+                            Spacer()
+                        }
+                    }
+
                     Spacer()
 
                     HStack {

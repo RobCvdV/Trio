@@ -8,6 +8,15 @@ enum NavigationDestinations: String {
     case bolusConfirm = "BolusConfirmView"
 }
 
+/// A predefined meal received from the phone, used to quickly prefill a meal entry on the Watch.
+struct MealPresetWatch: Hashable, Identifiable {
+    var id: String { dish }
+    let dish: String
+    let carbs: Double
+    let fat: Double
+    let protein: Double
+}
+
 enum MealBolusStep: String {
     case savingCarbs = "Saving Carbs..."
     case enactingBolus = "Enacting Bolus..."

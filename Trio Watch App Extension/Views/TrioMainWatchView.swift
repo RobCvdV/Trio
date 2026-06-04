@@ -253,12 +253,15 @@ struct TrioMainWatchView: View {
 
         guard let treatment = selectedTreatment else { return }
 
+        // Reset any stale meal input before starting a new treatment flow
+        state.carbsAmount = 0
+        state.fatAmount = 0
+        state.proteinAmount = 0
+
         switch treatment {
         case .meal:
             navigationPath.append(NavigationDestinations.carbsInput)
         case .bolus:
-            // Reset carbs amount when directly going to bolus input
-            state.carbsAmount = 0
             navigationPath.append(NavigationDestinations.bolusInput)
         case .mealBolusCombo:
             continueToBolus = true // Explicitely set subsequent view navigation
