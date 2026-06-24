@@ -90,6 +90,7 @@ extension Notification.Name {
             _ = resolver.resolve(LiveActivityManager.self)!
         }
         _ = resolver.resolve(IOBService.self)!
+        _ = resolver.resolve(AdvisorSyncManager.self)!
     }
 
     init() {
