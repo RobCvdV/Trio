@@ -121,7 +121,7 @@ final class BaseAdvisorSyncManager: AdvisorSyncManager, Injectable {
             predicate: NSPredicate.predicateForOneWeek, key: "date", ascending: true
         )
         return await ctx.perform {
-            (result as? [GlucoseStored] ?? []).compactMap { g in
+            (result as? [GlucoseStored] ?? []).compactMap { g -> AdvisorExport.GlucosePoint? in
                 guard let date = g.date else { return nil }
                 return AdvisorExport.GlucosePoint(date: date, value: Int(g.glucose).asMmolL.asDouble, direction: g.direction)
             }
@@ -135,7 +135,7 @@ final class BaseAdvisorSyncManager: AdvisorSyncManager, Injectable {
             predicate: NSPredicate.predicateForOneWeek, key: "date", ascending: true
         )
         return await ctx.perform {
-            (result as? [CarbEntryStored] ?? []).compactMap { c in
+            (result as? [CarbEntryStored] ?? []).compactMap { c -> AdvisorExport.CarbPoint? in
                 guard let date = c.date else { return nil }
                 return AdvisorExport.CarbPoint(date: date, carbs: c.carbs, fat: c.fat, protein: c.protein)
             }
@@ -171,7 +171,7 @@ final class BaseAdvisorSyncManager: AdvisorSyncManager, Injectable {
             predicate: NSPredicate.predicateForOneDayAgo, key: "deliverAt", ascending: true, fetchLimit: 96
         )
         return await ctx.perform {
-            (result as? [OrefDetermination] ?? []).compactMap { d in
+            (result as? [OrefDetermination] ?? []).compactMap { d -> AdvisorExport.DeterminationPoint? in
                 guard let date = d.deliverAt else { return nil }
                 return AdvisorExport.DeterminationPoint(
                     date: date,
