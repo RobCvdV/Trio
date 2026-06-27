@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		041D1E995A6AE92E9289DC49 /* TreatmentsDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8D1A7CA8C10C4403D4BBFA7 /* TreatmentsDataFlow.swift */; };
 		0437CE46C12535A56504EC19 /* SnoozeRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5822B15939E719628E9FF7C /* SnoozeRootView.swift */; };
+		0A3E4F6B822358356859C693 /* AdvisorSyncSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E45E362806DEE81C8BE3D9E /* AdvisorSyncSettingsView.swift */; };
 		0D9A5E34A899219C5C4CDFAF /* HistoryStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9455FA2D92E77A6C4AFED8A3 /* HistoryStateModel.swift */; };
 		0F7A65FBD2CD8D6477ED4539 /* GlucoseNotificationSettingsProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = E625985B47742D498CB1681A /* GlucoseNotificationSettingsProvider.swift */; };
 		110AEDE32C5193D200615CC9 /* BolusIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110AEDE02C5193D100615CC9 /* BolusIntent.swift */; };
@@ -1138,6 +1139,7 @@
 		49C782A62F73D9870062B0DD /* AlertEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlertEntry.swift; sourceTree = "<group>"; };
 		4B8F3B0E159844FD8746DFC0 /* TempTargetData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TempTargetData.swift; sourceTree = "<group>"; };
 		4DD795BA46B193644D48138C /* TargetsEditorRootView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TargetsEditorRootView.swift; sourceTree = "<group>"; };
+		4E45E362806DEE81C8BE3D9E /* AdvisorSyncSettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AdvisorSyncSettingsView.swift; sourceTree = "<group>"; };
 		505E09DC17A0C3D0AF4B66FE /* ISFEditorStateModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ISFEditorStateModel.swift; sourceTree = "<group>"; };
 		581516A32BCED84A00BF67D7 /* DebuggingIdentifiers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebuggingIdentifiers.swift; sourceTree = "<group>"; };
 		581516A82BCEEDF800BF67D7 /* NSPredicates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NSPredicates.swift; sourceTree = "<group>"; };
@@ -1968,6 +1970,7 @@
 			children = (
 				ED61BA4FF48DA1294BF9EA02 /* AdvisorExport.swift */,
 				7E94F4129E47915CAB156FE4 /* AdvisorSyncManager.swift */,
+				4E45E362806DEE81C8BE3D9E /* AdvisorSyncSettingsView.swift */,
 			);
 			name = AdvisorSync;
 			path = Trio/Sources/Services/AdvisorSync;
@@ -4960,6 +4963,7 @@
 				BD175EBE000010000000000D /* HistoryRootView+Confirmations.swift in Sources */,
 				90F1F8B4C07CB24064C09DB4 /* AdvisorExport.swift in Sources */,
 				F43CE96CD42A183F8C76AE4C /* AdvisorSyncManager.swift in Sources */,
+				0A3E4F6B822358356859C693 /* AdvisorSyncSettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -156,11 +156,13 @@ platform :ios do
       commit[:message].to_s.lines.first.to_s.strip
     ].reject(&:empty?).join("\n")
 
+    # Must wait for processing, otherwise App Store Connect has no build to attach the
+    # changelog to and the "What to Test" notes are silently dropped.
     upload_to_testflight(
       api_key: api_key,
       skip_submission: false,
       ipa: "Trio.ipa",
-      skip_waiting_for_build_processing: true,
+      skip_waiting_for_build_processing: false,
       changelog: changelog,
     )
   end

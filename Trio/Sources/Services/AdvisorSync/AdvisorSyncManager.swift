@@ -4,11 +4,34 @@ import CoreData
 import Foundation
 import Swinject
 
+/// Snapshot of the last export attempt — surfaced in Settings so the user can confirm it works.
+struct AdvisorSyncStatus: Equatable {
+    var date: Date
+    var success: Bool
+    var message: String
+}
+
+enum AdvisorSyncError: Error {
+    case iCloudUnavailable
+
+    var message: String {
+        switch self {
+        case .iCloudUnavailable:
+            return String(localized: "iCloud account not available. Sign in to iCloud on this device and enable iCloud Drive.")
+        }
+    }
+}
+
 /// Exports the user's settings + recent treatment/glucose data to the **Diabetics Advisor**
 /// Mac app, via the user's private CloudKit database. Runs in the background: pushes shortly
 /// after each loop completes (debounced) and once at launch. Read-only w.r.t. Trio's data.
 protocol AdvisorSyncManager {
+    /// Fire-and-forget background sync (loop subscription + launch).
     func syncNow()
+    /// Run a sync and return the outcome — used by the manual "Sync now" button in Settings.
+    @discardableResult func syncAndReport() async -> AdvisorSyncStatus
+    /// The most recent sync outcome, if any.
+    var lastStatus: AdvisorSyncStatus? { get }
 }
 
 final class BaseAdvisorSyncManager: AdvisorSyncManager, Injectable {
@@ -24,6 +47,13 @@ final class BaseAdvisorSyncManager: AdvisorSyncManager, Injectable {
 
     private let queue = DispatchQueue(label: "BaseAdvisorSyncManager.queue", qos: .background)
     private var subscriptions = Set<AnyCancellable>()
+
+    private let statusLock = NSLock()
+    private var _lastStatus: AdvisorSyncStatus?
+    var lastStatus: AdvisorSyncStatus? {
+        statusLock.lock(); defer { statusLock.unlock() }
+        return _lastStatus
+    }
 
     init(resolver: Resolver) {
         injectServices(resolver)
@@ -43,15 +73,36 @@ final class BaseAdvisorSyncManager: AdvisorSyncManager, Injectable {
 
     func syncNow() {
         Task.detached(priority: .background) { [weak self] in
-            guard let self else { return }
-            do {
-                let export = try await self.buildExport()
-                try await self.push(export)
-                debug(.service, "AdvisorSync: pushed export (\(export.glucose.count) glucose, \(export.determinations.count) determinations)")
-            } catch {
-                warning(.service, "AdvisorSync: sync failed: \(error)")
-            }
+            _ = await self?.performSync()
         }
+    }
+
+    @discardableResult
+    func syncAndReport() async -> AdvisorSyncStatus {
+        await performSync()
+    }
+
+    /// Builds and pushes the export, recording the outcome in `lastStatus`.
+    @discardableResult
+    private func performSync() async -> AdvisorSyncStatus {
+        let status: AdvisorSyncStatus
+        do {
+            let export = try await buildExport()
+            try await push(export)
+            let msg = String(
+                localized: "Pushed \(export.glucose.count) glucose, \(export.insulin.count) insulin, \(export.determinations.count) determinations"
+            )
+            debug(.service, "AdvisorSync: \(msg)")
+            status = AdvisorSyncStatus(date: Date(), success: true, message: msg)
+        } catch let error as AdvisorSyncError {
+            warning(.service, "AdvisorSync: sync failed: \(error)")
+            status = AdvisorSyncStatus(date: Date(), success: false, message: error.message)
+        } catch {
+            warning(.service, "AdvisorSync: sync failed: \(error)")
+            status = AdvisorSyncStatus(date: Date(), success: false, message: (error as NSError).localizedDescription)
+        }
+        statusLock.lock(); _lastStatus = status; statusLock.unlock()
+        return status
     }
 
     // MARK: - Build
@@ -198,7 +249,9 @@ final class BaseAdvisorSyncManager: AdvisorSyncManager, Injectable {
 
     private func push(_ export: AdvisorExport) async throws {
         let container = CKContainer(identifier: containerID)
-        guard (try? await container.accountStatus()) == .available else { return }
+        guard (try? await container.accountStatus()) == .available else {
+            throw AdvisorSyncError.iCloudUnavailable
+        }
         let db = container.privateCloudDatabase
         let id = CKRecord.ID(recordName: recordName)
 
