@@ -36,8 +36,9 @@ final class BaseAdvisorSyncManager: AdvisorSyncManager, Injectable {
             .debounce(for: .seconds(20), scheduler: queue)
             .sink { [weak self] _ in self?.syncNow() }
             .store(in: &subscriptions)
-        // And once at launch.
-        syncNow()
+        // And once shortly after launch — delayed so we never run on the critical launch
+        // path. Trio's loop/dosing startup must never wait on, or be affected by, our export.
+        queue.asyncAfter(deadline: .now() + 15) { [weak self] in self?.syncNow() }
     }
 
     func syncNow() {
@@ -166,9 +167,13 @@ final class BaseAdvisorSyncManager: AdvisorSyncManager, Injectable {
 
     private func readDeterminations() async throws -> [AdvisorExport.DeterminationPoint] {
         let ctx = coreData.newTaskContext()
+        // OrefDetermination is keyed on `deliverAt` (it has no `date` attribute), so the generic
+        // `predicateForOneDayAgo` (which filters on `date`) would throw an NSException during SQL
+        // generation. Filter on `deliverAt` to match the entity.
+        let oneDayAgo = NSPredicate(format: "deliverAt >= %@", Date().addingTimeInterval(-24 * 3600) as NSDate)
         let result = try await coreData.fetchEntitiesAsync(
             ofType: OrefDetermination.self, onContext: ctx,
-            predicate: NSPredicate.predicateForOneDayAgo, key: "deliverAt", ascending: true, fetchLimit: 96
+            predicate: oneDayAgo, key: "deliverAt", ascending: true, fetchLimit: 96
         )
         return await ctx.perform {
             (result as? [OrefDetermination] ?? []).compactMap { d -> AdvisorExport.DeterminationPoint? in

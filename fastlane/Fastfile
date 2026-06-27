@@ -146,12 +146,22 @@ platform :ios do
       key_content: "#{FASTLANE_KEY}"
     )
     
+    # Prefer the CI-provided branch name (reliable even on detached checkouts);
+    # fall back to git_branch for local runs.
+    branch_name = ENV["GITHUB_REF_NAME"].to_s.empty? ? git_branch : ENV["GITHUB_REF_NAME"]
+    commit = last_git_commit
+    changelog = [
+      "⚙️ Branch: #{branch_name}",
+      "commit #{commit[:abbreviated_commit_hash]}",
+      commit[:message].to_s.lines.first.to_s.strip
+    ].reject(&:empty?).join("\n")
+
     upload_to_testflight(
       api_key: api_key,
       skip_submission: false,
       ipa: "Trio.ipa",
       skip_waiting_for_build_processing: true,
-      changelog: git_branch+" "+last_git_commit[:abbreviated_commit_hash],
+      changelog: changelog,
     )
   end
 
