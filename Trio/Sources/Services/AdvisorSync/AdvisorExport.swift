@@ -7,7 +7,7 @@ import Foundation
 /// (`~/Dev/diabetics-advisor-ai/Sources/Shared/AdvisorExport.swift`). Keep both in sync and
 /// bump `schemaVersion` on breaking changes. Glucose-domain values are exported in mmol/L.
 struct AdvisorExport: Codable {
-    var schemaVersion: Int = 1
+    var schemaVersion: Int = 2
     var capturedAt: Date
     var appVersion: String?
     var glucoseUnit: String = "mmol/L"
@@ -17,6 +17,10 @@ struct AdvisorExport: Codable {
     var carbs: [CarbPoint] = []
     var insulin: [InsulinPoint] = []
     var determinations: [DeterminationPoint] = []
+    // Profile overrides (scale ISF/CR/basal by a percentage, may set a target) and temp targets —
+    // exercise/sick/hot-day adjustments. Needed to know the ACTUAL settings in force over time.
+    var overrides: [OverridePoint] = []
+    var tempTargets: [TempTargetPoint] = []
 
     struct SchedulePoint: Codable { let time: String; let value: Double }
     struct TargetPoint: Codable { let time: String; let low: Double; let high: Double }
@@ -65,5 +69,25 @@ struct AdvisorExport: Codable {
         let cob: [Double]?
         let uam: [Double]?
         let zt: [Double]?
+    }
+
+    /// A profile override active for an interval. `percentage` scales the base curves (which ones
+    /// is given by affectsISF/affectsCR); it may also impose a `target`.
+    struct OverridePoint: Codable {
+        let start: Date
+        let end: Date?
+        let name: String?
+        let percentage: Double?
+        let affectsISF: Bool
+        let affectsCR: Bool
+        let target: Double?
+    }
+
+    /// A temporary glucose target active for an interval.
+    struct TempTargetPoint: Codable {
+        let start: Date
+        let end: Date?
+        let name: String?
+        let target: Double?
     }
 }

@@ -45,6 +45,12 @@ final class BaseAdvisorSyncManager: AdvisorSyncManager, Injectable {
     private let recordType = "AdvisorExport"
     private let recordName = "current-advisor-export"
 
+    /// How many days of time-series to export — wide enough for multi-week pattern analysis.
+    private let windowDays = 14
+    private var windowStart: Date { Date().addingTimeInterval(-Double(windowDays) * 24 * 3600) }
+    /// Predicate for entities keyed on a `date` attribute (GlucoseStored, CarbEntryStored).
+    private var windowPredicate: NSPredicate { NSPredicate(format: "date >= %@", windowStart as NSDate) }
+
     private let queue = DispatchQueue(label: "BaseAdvisorSyncManager.queue", qos: .background)
     private var subscriptions = Set<AnyCancellable>()
 
@@ -127,12 +133,16 @@ final class BaseAdvisorSyncManager: AdvisorSyncManager, Injectable {
         async let carbs = readCarbs()
         async let insulin = readInsulin()
         async let dets = readDeterminations()
+        async let overrides = readOverrides()
+        async let tempTargets = readTempTargets()
 
         var export = AdvisorExport(capturedAt: Date(), appVersion: Bundle.main.releaseVersionNumber, settings: settings)
         export.glucose = try await glucose
         export.carbs = try await carbs
         export.insulin = await insulin
         export.determinations = try await dets
+        export.overrides = try await overrides
+        export.tempTargets = try await tempTargets
         return export
     }
 
@@ -170,7 +180,7 @@ final class BaseAdvisorSyncManager: AdvisorSyncManager, Injectable {
         let ctx = coreData.newTaskContext()
         let result = try await coreData.fetchEntitiesAsync(
             ofType: GlucoseStored.self, onContext: ctx,
-            predicate: NSPredicate.predicateForOneWeek, key: "date", ascending: true
+            predicate: windowPredicate, key: "date", ascending: true
         )
         return await ctx.perform {
             (result as? [GlucoseStored] ?? []).compactMap { g -> AdvisorExport.GlucosePoint? in
@@ -184,7 +194,7 @@ final class BaseAdvisorSyncManager: AdvisorSyncManager, Injectable {
         let ctx = coreData.newTaskContext()
         let result = try await coreData.fetchEntitiesAsync(
             ofType: CarbEntryStored.self, onContext: ctx,
-            predicate: NSPredicate.predicateForOneWeek, key: "date", ascending: true
+            predicate: windowPredicate, key: "date", ascending: true
         )
         return await ctx.perform {
             (result as? [CarbEntryStored] ?? []).compactMap { c -> AdvisorExport.CarbPoint? in
@@ -195,7 +205,7 @@ final class BaseAdvisorSyncManager: AdvisorSyncManager, Injectable {
     }
 
     private func readInsulin() async -> [AdvisorExport.InsulinPoint] {
-        let cutoff = Date().addingTimeInterval(-7 * 24 * 3600)
+        let cutoff = windowStart
         let events = (try? await pumpHistoryStorage.getPumpHistory()) ?? []
         return events.compactMap { e -> AdvisorExport.InsulinPoint? in
             guard e.timestamp >= cutoff else { return nil }
@@ -219,12 +229,12 @@ final class BaseAdvisorSyncManager: AdvisorSyncManager, Injectable {
     private func readDeterminations() async throws -> [AdvisorExport.DeterminationPoint] {
         let ctx = coreData.newTaskContext()
         // OrefDetermination is keyed on `deliverAt` (it has no `date` attribute), so the generic
-        // `predicateForOneDayAgo` (which filters on `date`) would throw an NSException during SQL
-        // generation. Filter on `deliverAt` to match the entity.
-        let oneDayAgo = NSPredicate(format: "deliverAt >= %@", Date().addingTimeInterval(-24 * 3600) as NSDate)
+        // date predicates would throw an NSException during SQL generation. Filter on `deliverAt`.
+        // fetchLimit is a generous safety cap (~21 days at one loop / 5 min).
+        let predicate = NSPredicate(format: "deliverAt >= %@", windowStart as NSDate)
         let result = try await coreData.fetchEntitiesAsync(
             ofType: OrefDetermination.self, onContext: ctx,
-            predicate: oneDayAgo, key: "deliverAt", ascending: true, fetchLimit: 96
+            predicate: predicate, key: "deliverAt", ascending: true, fetchLimit: 6000
         )
         return await ctx.perform {
             (result as? [OrefDetermination] ?? []).compactMap { d -> AdvisorExport.DeterminationPoint? in
@@ -238,8 +248,55 @@ final class BaseAdvisorSyncManager: AdvisorSyncManager, Injectable {
                     target: d.currentTarget.map { $0.doubleValue.asMmolFromMgdL },
                     recommendedRate: d.rate?.doubleValue,
                     recommendedBolus: d.insulinReq?.doubleValue,
-                    reason: d.reason,
+                    // The reason string is verbose; truncate to keep the payload manageable.
+                    reason: d.reason.map { String($0.prefix(240)) },
                     predBGs: nil
+                )
+            }
+        }
+    }
+
+    private func readOverrides() async throws -> [AdvisorExport.OverridePoint] {
+        let ctx = coreData.newTaskContext()
+        let predicate = NSPredicate(format: "startDate >= %@", windowStart as NSDate)
+        let result = try await coreData.fetchEntitiesAsync(
+            ofType: OverrideRunStored.self, onContext: ctx,
+            predicate: predicate, key: "startDate", ascending: true
+        )
+        return await ctx.perform {
+            (result as? [OverrideRunStored] ?? []).compactMap { run -> AdvisorExport.OverridePoint? in
+                guard let start = run.startDate else { return nil }
+                let def = run.override
+                let affectsISF = (def?.isf ?? false) || (def?.isfAndCr ?? false)
+                let affectsCR = (def?.cr ?? false) || (def?.isfAndCr ?? false)
+                return AdvisorExport.OverridePoint(
+                    start: start,
+                    end: run.endDate,
+                    name: run.name ?? def?.name,
+                    percentage: def?.percentage,
+                    affectsISF: affectsISF,
+                    affectsCR: affectsCR,
+                    target: (run.target ?? def?.target).map { $0.doubleValue.asMmolFromMgdL }
+                )
+            }
+        }
+    }
+
+    private func readTempTargets() async throws -> [AdvisorExport.TempTargetPoint] {
+        let ctx = coreData.newTaskContext()
+        let predicate = NSPredicate(format: "startDate >= %@", windowStart as NSDate)
+        let result = try await coreData.fetchEntitiesAsync(
+            ofType: TempTargetRunStored.self, onContext: ctx,
+            predicate: predicate, key: "startDate", ascending: true
+        )
+        return await ctx.perform {
+            (result as? [TempTargetRunStored] ?? []).compactMap { run -> AdvisorExport.TempTargetPoint? in
+                guard let start = run.startDate else { return nil }
+                return AdvisorExport.TempTargetPoint(
+                    start: start,
+                    end: run.endDate,
+                    name: run.name ?? run.tempTarget?.name,
+                    target: (run.target ?? run.tempTarget?.target).map { $0.doubleValue.asMmolFromMgdL }
                 )
             }
         }
