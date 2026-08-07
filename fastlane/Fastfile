@@ -146,12 +146,24 @@ platform :ios do
       key_content: "#{FASTLANE_KEY}"
     )
     
+    # Prefer the CI-provided branch name (reliable even on detached checkouts);
+    # fall back to git_branch for local runs.
+    branch_name = ENV["GITHUB_REF_NAME"].to_s.empty? ? git_branch : ENV["GITHUB_REF_NAME"]
+    commit = last_git_commit
+    changelog = [
+      "⚙️ Branch: #{branch_name}",
+      "commit #{commit[:abbreviated_commit_hash]}",
+      commit[:message].to_s.lines.first.to_s.strip
+    ].reject(&:empty?).join("\n")
+
+    # Must wait for processing, otherwise App Store Connect has no build to attach the
+    # changelog to and the "What to Test" notes are silently dropped.
     upload_to_testflight(
       api_key: api_key,
       skip_submission: false,
       ipa: "Trio.ipa",
-      skip_waiting_for_build_processing: true,
-      changelog: git_branch+" "+last_git_commit[:abbreviated_commit_hash],
+      skip_waiting_for_build_processing: false,
+      changelog: changelog,
     )
   end
 
@@ -183,7 +195,12 @@ platform :ios do
       Spaceship::ConnectAPI::BundleIdCapability::Type::APP_GROUPS,
       Spaceship::ConnectAPI::BundleIdCapability::Type::HEALTHKIT,
       Spaceship::ConnectAPI::BundleIdCapability::Type::NFC_TAG_READING,
-      Spaceship::ConnectAPI::BundleIdCapability::Type::PUSH_NOTIFICATIONS
+      Spaceship::ConnectAPI::BundleIdCapability::Type::PUSH_NOTIFICATIONS,
+      # Diabetics Advisor sync. NOTE: this enables the iCloud capability, but the App Store
+      # Connect API cannot associate the CloudKit container — that is a one-time manual step
+      # in the Developer portal / Xcode (associate iCloud.com.robcoenen.diabeticsadvisor with
+      # this App ID), after which `match` must regenerate the profile (run the certs lane).
+      Spaceship::ConnectAPI::BundleIdCapability::Type::ICLOUD
     ])
 
     configure_bundle_id("Trio Watch Complication", "#{BUNDLE_ID}.watchkitapp.TrioWatchComplication", [
