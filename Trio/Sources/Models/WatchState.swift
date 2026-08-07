@@ -16,6 +16,10 @@ struct WatchState: Hashable, Equatable, Sendable, Encodable, Decodable {
     var lastLoopTime: String?
     var overridePresets: [OverridePresetWatch] = []
     var tempTargetPresets: [TempTargetPresetWatch] = []
+    var mealPresets: [MealPresetWatch] = []
+
+    /// Whether fat & protein entry should be offered on the Watch (mirrors the `useFPUconversion` setting).
+    var displayFatAndProtein: Bool = false
 
     // Safety limits
     var maxBolus: Decimal = 10.0
@@ -44,6 +48,8 @@ struct WatchState: Hashable, Equatable, Sendable, Encodable, Decodable {
             lhs.lastLoopTime == rhs.lastLoopTime &&
             lhs.overridePresets == rhs.overridePresets &&
             lhs.tempTargetPresets == rhs.tempTargetPresets &&
+            lhs.mealPresets == rhs.mealPresets &&
+            lhs.displayFatAndProtein == rhs.displayFatAndProtein &&
             lhs.maxBolus == rhs.maxBolus &&
             lhs.maxCarbs == rhs.maxCarbs &&
             lhs.maxFat == rhs.maxFat &&
@@ -70,6 +76,8 @@ struct WatchState: Hashable, Equatable, Sendable, Encodable, Decodable {
         hasher.combine(lastLoopTime)
         hasher.combine(overridePresets)
         hasher.combine(tempTargetPresets)
+        hasher.combine(mealPresets)
+        hasher.combine(displayFatAndProtein)
         hasher.combine(maxBolus)
         hasher.combine(maxCarbs)
         hasher.combine(maxFat)
@@ -77,4 +85,13 @@ struct WatchState: Hashable, Equatable, Sendable, Encodable, Decodable {
         hasher.combine(bolusIncrement)
         hasher.combine(confirmBolusFaster)
     }
+}
+
+/// A predefined meal (saved on the phone) surfaced on the Watch so the user can quickly
+/// prefill carbs (and optionally fat & protein) when logging a meal.
+struct MealPresetWatch: Hashable, Equatable, Codable {
+    let dish: String
+    let carbs: Double
+    let fat: Double
+    let protein: Double
 }

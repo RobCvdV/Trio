@@ -27,6 +27,10 @@ import WatchConnectivity
     var lastLoopTime: String? = "--"
     var overridePresets: [OverridePresetWatch] = []
     var tempTargetPresets: [TempTargetPresetWatch] = []
+    var mealPresets: [MealPresetWatch] = []
+
+    /// Whether fat & protein entry should be offered on the Watch (mirrors the phone's `useFPUconversion` setting).
+    var displayFatAndProtein: Bool = false
 
     /// treatments inputs
     /// used to store carbs for combined meal-bolus-treatments
@@ -279,6 +283,8 @@ import WatchConnectivity
                 // reset input amounts
                 self.bolusAmount = 0
                 self.carbsAmount = 0
+                self.fatAmount = 0
+                self.proteinAmount = 0
 
                 // reset auth progress
                 self.confirmationProgress = 0
@@ -521,6 +527,22 @@ import WatchConnectivity
                 else { return nil }
                 return TempTargetPresetWatch(name: name, isEnabled: isEnabled)
             }
+        }
+
+        if let mealPresetData = message[WatchMessageKeys.mealPresets] as? [[String: Any]] {
+            mealPresets = mealPresetData.compactMap { data in
+                guard let dish = data[WatchMessageKeys.dish] as? String else { return nil }
+                return MealPresetWatch(
+                    dish: dish,
+                    carbs: (data[WatchMessageKeys.carbs] as? NSNumber)?.doubleValue ?? 0,
+                    fat: (data[WatchMessageKeys.fat] as? NSNumber)?.doubleValue ?? 0,
+                    protein: (data[WatchMessageKeys.protein] as? NSNumber)?.doubleValue ?? 0
+                )
+            }
+        }
+
+        if let displayFatAndProtein = message[WatchMessageKeys.displayFatAndProtein] as? Bool {
+            self.displayFatAndProtein = displayFatAndProtein
         }
 
         if let maxBolusValue = message[WatchMessageKeys.maxBolus] {
