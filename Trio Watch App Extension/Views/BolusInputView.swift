@@ -29,7 +29,8 @@ struct BolusInputView: View {
         // In the "Meal & Bolus" flow the user can dial insulin down to zero (or the
         // recommendation itself is zero). In that case there is nothing to bolus, so
         // offer a plain "Log Carbs" action instead of a dead-end disabled button.
-        let isCarbsOnly = state.carbsAmount > 0 && adjustedBolusAmount <= 0
+        let hasMealInput = state.carbsAmount > 0 || state.fatAmount > 0 || state.proteinAmount > 0
+        let isCarbsOnly = hasMealInput && adjustedBolusAmount <= 0
         let actionButtonLabel = isCarbsOnly
             ? String(localized: "No Bolus, Log Carbs", comment: "Button Label to Log Carbs on Watch")
             : String(localized: "Enact Bolus")
@@ -54,6 +55,22 @@ struct BolusInputView: View {
                         HStack {
                             Text("Carbs:").bold().font(.subheadline).padding(.leading)
                             Text("\(state.carbsAmount) g").font(.subheadline).foregroundStyle(Color.orange)
+                            Spacer()
+                        }
+                    }
+
+                    if state.fatAmount > 0 {
+                        HStack {
+                            Text("Fat:").bold().font(.subheadline).padding(.leading)
+                            Text("\(state.fatAmount) g").font(.subheadline).foregroundStyle(Color.yellow)
+                            Spacer()
+                        }
+                    }
+
+                    if state.proteinAmount > 0 {
+                        HStack {
+                            Text("Protein:").bold().font(.subheadline).padding(.leading)
+                            Text("\(state.proteinAmount) g").font(.subheadline).foregroundStyle(Color.red)
                             Spacer()
                         }
                     }
@@ -122,8 +139,15 @@ struct BolusInputView: View {
 
                     Button(actionButtonLabel) {
                         if isCarbsOnly {
-                            state.sendCarbsRequest(state.carbsAmount)
-                            state.carbsAmount = 0 // reset carbs in state
+                            state.sendCarbsRequest(
+                                state.carbsAmount,
+                                fat: state.fatAmount,
+                                protein: state.proteinAmount
+                            )
+                            // reset meal inputs in state
+                            state.carbsAmount = 0
+                            state.fatAmount = 0
+                            state.proteinAmount = 0
                             navigationPath.append(NavigationDestinations.acknowledgmentPending)
                         } else {
                             state.bolusAmount = min(bolusAmount, effectiveBolusLimit)

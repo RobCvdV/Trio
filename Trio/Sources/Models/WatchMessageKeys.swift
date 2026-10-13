@@ -11,6 +11,8 @@ enum WatchMessageKeys {
     // Treatment Keys
     static let bolus = "bolus"
     static let carbs = "carbs"
+    static let fat = "fat"
+    static let protein = "protein"
     static let cancelBolus = "cancelBolus"
     static let bolusCanceled = "bolusCanceled"
     static let bolusProgress = "bolusProgress"
@@ -43,6 +45,9 @@ enum WatchMessageKeys {
     static let maxYAxisValue = "maxYAxisValue"
     static let overridePresets = "overridePresets"
     static let tempTargetPresets = "tempTargetPresets"
+    static let mealPresets = "mealPresets"
+    static let dish = "dish"
+    static let displayFatAndProtein = "displayFatAndProtein"
 
     // Limits and Settings Keys
     static let maxBolus = "maxBolus"

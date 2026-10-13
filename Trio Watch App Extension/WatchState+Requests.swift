@@ -39,8 +39,10 @@ extension WatchState {
     /// Sends a carbohydrate entry request to the paired iPhone
     /// - Parameters:
     ///   - amount: The amount of carbs in grams
+    ///   - fat: The amount of fat in grams (optional, defaults to 0)
+    ///   - protein: The amount of protein in grams (optional, defaults to 0)
     ///   - date: The timestamp for the carb entry (defaults to current time)
-    func sendCarbsRequest(_ amount: Int, _ date: Date = Date()) {
+    func sendCarbsRequest(_ amount: Int, fat: Int = 0, protein: Int = 0, date: Date = Date()) {
         guard let session = session, session.isReachable else {
             Task {
                 await WatchLogger.shared.log("⌚️ Carbs request aborted: session unreachable")
@@ -49,13 +51,21 @@ extension WatchState {
         }
 
         Task {
-            await WatchLogger.shared.log("⌚️ Sending carbs request: \(amount)g at \(date)")
+            await WatchLogger.shared.log("⌚️ Sending carbs request: \(amount)g (fat: \(fat)g, protein: \(protein)g) at \(date)")
         }
 
-        let message: [String: Any] = [
+        var message: [String: Any] = [
             WatchMessageKeys.carbs: amount,
             WatchMessageKeys.date: date.timeIntervalSince1970
         ]
+
+        // Only attach fat/protein when present to keep the carbs-only path unchanged
+        if fat > 0 {
+            message[WatchMessageKeys.fat] = fat
+        }
+        if protein > 0 {
+            message[WatchMessageKeys.protein] = protein
+        }
 
         session.sendMessage(message, replyHandler: nil) { error in
             Task {

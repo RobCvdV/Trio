@@ -34,6 +34,26 @@ struct BolusConfirmationView: View {
                     }.padding(.horizontal)
                 }
 
+                if state.fatAmount > 0 {
+                    HStack {
+                        Text("Fat:")
+                        Spacer()
+                        Text("\(state.fatAmount) g")
+                            .bold()
+                            .foregroundStyle(.yellow)
+                    }.padding(.horizontal)
+                }
+
+                if state.proteinAmount > 0 {
+                    HStack {
+                        Text("Protein:")
+                        Spacer()
+                        Text("\(state.proteinAmount) g")
+                            .bold()
+                            .foregroundStyle(.red)
+                    }.padding(.horizontal)
+                }
+
                 HStack {
                     Text("Bolus")
                     Spacer()
@@ -52,9 +72,10 @@ struct BolusConfirmationView: View {
             Spacer()
 
             Button("Cancel") {
-                if state.carbsAmount > 0 {
-                    state.carbsAmount = 0 // reset carbs in state
-                }
+                // reset meal input in state
+                state.carbsAmount = 0
+                state.fatAmount = 0
+                state.proteinAmount = 0
                 bolusAmount = 0 // reset bolus in state
                 confirmationProgress = 0 // reset auth progress
                 navigationPath.removeLast(navigationPath.count)
@@ -80,9 +101,17 @@ struct BolusConfirmationView: View {
                 WKInterfaceDevice.current().play(.success)
 
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    if state.carbsAmount > 0 {
-                        state.sendCarbsRequest(state.carbsAmount, Date())
-                        state.carbsAmount = 0 // reset carbs in state
+                    if state.carbsAmount > 0 || state.fatAmount > 0 || state.proteinAmount > 0 {
+                        state.sendCarbsRequest(
+                            state.carbsAmount,
+                            fat: state.fatAmount,
+                            protein: state.proteinAmount,
+                            date: Date()
+                        )
+                        // reset meal input in state
+                        state.carbsAmount = 0
+                        state.fatAmount = 0
+                        state.proteinAmount = 0
                     }
                     state.sendBolusRequest(Decimal(bolusAmount))
                     bolusAmount = 0 // reset bolus in state
