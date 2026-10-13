@@ -44,5 +44,6 @@ final class ServiceAssembly: Assembly {
             .inObjectScope(.container)
         container.register(TelemetryAttestor.self) { r in TelemetryAttestor(resolver: r) }
             .inObjectScope(.container)
+        container.register(AdvisorSyncManager.self) { r in BaseAdvisorSyncManager(resolver: r) }
     }
 }

@@ -398,6 +398,15 @@ extension Settings {
                         }
                     ).listRowBackground(Color.chart)
 
+                    if let advisor = resolver.resolve(AdvisorSyncManager.self) {
+                        Section(
+                            header: Text("Diabetics Advisor"),
+                            content: {
+                                AdvisorSyncSettingsView(manager: advisor)
+                            }
+                        ).listRowBackground(Color.chart)
+                    }
+
                 } else {
                     Section(
                         header: Text("Search Results"),

@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0A3E4F6B822358356859C693 /* AdvisorSyncSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E45E362806DEE81C8BE3D9E /* AdvisorSyncSettingsView.swift */; };
+		90F1F8B4C07CB24064C09DB4 /* AdvisorExport.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED61BA4FF48DA1294BF9EA02 /* AdvisorExport.swift */; };
+		F43CE96CD42A183F8C76AE4C /* AdvisorSyncManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E94F4129E47915CAB156FE4 /* AdvisorSyncManager.swift */; };
 		041D1E995A6AE92E9289DC49 /* TreatmentsDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8D1A7CA8C10C4403D4BBFA7 /* TreatmentsDataFlow.swift */; };
 		0D9A5E34A899219C5C4CDFAF /* HistoryStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9455FA2D92E77A6C4AFED8A3 /* HistoryStateModel.swift */; };
 		110AEDE32C5193D200615CC9 /* BolusIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110AEDE02C5193D100615CC9 /* BolusIntent.swift */; };
@@ -1106,6 +1109,9 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		4E45E362806DEE81C8BE3D9E /* AdvisorSyncSettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AdvisorSyncSettingsView.swift; sourceTree = "<group>"; };
+		7E94F4129E47915CAB156FE4 /* AdvisorSyncManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AdvisorSyncManager.swift; sourceTree = "<group>"; };
+		ED61BA4FF48DA1294BF9EA02 /* AdvisorExport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AdvisorExport.swift; sourceTree = "<group>"; };
 		10E61A0885164081B57C357C /* NightscoutUploadSerializer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NightscoutUploadSerializer.swift; sourceTree = "<group>"; };
 		110AEDE02C5193D100615CC9 /* BolusIntent.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = BolusIntent.swift; sourceTree = "<group>"; };
 		110AEDE12C5193D100615CC9 /* BolusIntentRequest.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = BolusIntentRequest.swift; sourceTree = "<group>"; };
@@ -2173,6 +2179,17 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		1E647E496B7BD85BAF0F9BCC /* AdvisorSync */ = {
+			isa = PBXGroup;
+			children = (
+				ED61BA4FF48DA1294BF9EA02 /* AdvisorExport.swift */,
+				7E94F4129E47915CAB156FE4 /* AdvisorSyncManager.swift */,
+				4E45E362806DEE81C8BE3D9E /* AdvisorSyncSettingsView.swift */,
+			);
+			name = AdvisorSync;
+			path = Trio/Sources/Services/AdvisorSync;
+			sourceTree = SOURCE_ROOT;
+		};
 		0610F7D6D2EC00E3BA1569F0 /* ConfigEditor */ = {
 			isa = PBXGroup;
 			children = (
@@ -2900,6 +2917,7 @@
 				BDFF7AA02D25FAA80016C40C /* Trio Watch App Tests */,
 				DD09D6492D2B6253000D82C9 /* Trio Watch Complication */,
 				38FCF3EE25E9028E0078B0D1 /* TrioTests */,
+				1E647E496B7BD85BAF0F9BCC /* AdvisorSync */,
 			);
 			sourceTree = "<group>";
 		};
@@ -5950,6 +5968,9 @@
 				BD175EBE000010000000000B /* HistoryRootView+Filters.swift in Sources */,
 				BD175EBE000010000000000C /* HistoryRootView+AddGlucose.swift in Sources */,
 				BD175EBE000010000000000D /* HistoryRootView+Confirmations.swift in Sources */,
+				90F1F8B4C07CB24064C09DB4 /* AdvisorExport.swift in Sources */,
+				F43CE96CD42A183F8C76AE4C /* AdvisorSyncManager.swift in Sources */,
+				0A3E4F6B822358356859C693 /* AdvisorSyncSettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
