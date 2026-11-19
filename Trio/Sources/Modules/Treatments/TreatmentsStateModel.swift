@@ -102,9 +102,11 @@ extension Treatments {
 
         var carbsRequired: Decimal?
         var useFPUconversion: Bool = false
-        var dish: String = ""
-        var selection: MealPresetStored?
-        var summation: [String] = []
+
+        /// The meal being composed from presets, with a (fractional) number of portions per item.
+        var mealItems: [MealItem] = []
+        /// What the meal composer last added to `carbs`/`fat`/`protein`, so re-applying only adds the difference.
+        var appliedMealTotals: MealTotals = .zero
         var maxCarbs: Decimal = 0
         var maxFat: Decimal = 0
         var maxProtein: Decimal = 0
@@ -730,44 +732,103 @@ extension Treatments {
             }
         }
 
-        // MARK: - Presets
+        // MARK: - Meal presets
 
-        func deletePreset() {
-            if selection != nil {
-                viewContext.delete(selection!)
-
-                do {
-                    guard viewContext.hasChanges else { return }
-                    try viewContext.save()
-                } catch {
-                    print(error.localizedDescription)
+        /// Totals of the composed meal, rounded to whole grams like the treatment's input fields.
+        /// Fat and protein only count when FPU conversion is enabled.
+        var mealTotals: MealTotals {
+            let sum = mealItems.reduce(into: MealTotals.zero) { totals, item in
+                totals.carbs += item.totalCarbs
+                if useFPUconversion {
+                    totals.fat += item.totalFat
+                    totals.protein += item.totalProtein
                 }
-                carbs = 0
-                fat = 0
-                protein = 0
             }
-            selection = nil
+            return MealTotals(
+                carbs: sum.carbs.rounded(scale: 0),
+                fat: sum.fat.rounded(scale: 0),
+                protein: sum.protein.rounded(scale: 0)
+            )
         }
 
-        func removePresetFromNewMeal() {
-            let a = summation.firstIndex(where: { $0 == selection?.dish! })
-            if a != nil, summation[a ?? 0] != "" {
-                summation.remove(at: a!)
+        /// Whether the composed meal differs from what was last applied to the treatment.
+        var hasUnappliedMealChanges: Bool {
+            mealTotals != appliedMealTotals
+        }
+
+        func mealQuantity(for presetID: NSManagedObjectID) -> Decimal {
+            mealItems.first(where: { $0.id == presetID })?.quantity ?? 0
+        }
+
+        /// Adds a portion of `preset` to the meal, rounding up to the next whole portion (½ → 1, 1½ → 2).
+        func addPortion(of preset: MealPresetStored) {
+            if mealItems.contains(where: { $0.id == preset.objectID }) {
+                addPortion(to: preset.objectID)
+            } else {
+                mealItems.append(MealItem(preset: preset, quantity: 1))
             }
         }
 
-        func addPresetToNewMeal() {
-            if let selection = selection, let dish = selection.dish {
-                summation.append(dish)
+        /// Adds a portion to an item already in the meal, rounding up to the next whole portion.
+        func addPortion(to itemID: NSManagedObjectID) {
+            guard let index = mealItems.firstIndex(where: { $0.id == itemID }) else { return }
+            mealItems[index].quantity = mealItems[index].quantity.rounded(scale: 0, roundingMode: .down) + 1
+        }
+
+        /// Removes a portion of the item, rounding down to the previous whole portion (1½ → 1, ½ → 0).
+        /// The item is removed from the meal once it reaches zero.
+        func removePortion(of itemID: NSManagedObjectID) {
+            guard let item = mealItems.first(where: { $0.id == itemID }) else { return }
+            setMealQuantity(item.quantity.rounded(scale: 0, roundingMode: .up) - 1, for: itemID)
+        }
+
+        /// Sets the number of portions for an item already in the meal, or adds the preset with that quantity.
+        /// A quantity of zero or less removes the item.
+        func setMealQuantity(_ quantity: Decimal, for itemID: NSManagedObjectID, preset: MealPresetStored? = nil) {
+            if quantity <= 0 {
+                removeMealItem(itemID)
+                return
+            }
+            if let index = mealItems.firstIndex(where: { $0.id == itemID }) {
+                mealItems[index].quantity = quantity
+            } else if let preset {
+                mealItems.append(MealItem(preset: preset, quantity: quantity))
             }
         }
 
-        func addNewPresetToWaitersNotepad(_ dish: String) {
-            summation.append(dish)
+        func removeMealItem(_ itemID: NSManagedObjectID) {
+            mealItems.removeAll { $0.id == itemID }
         }
 
-        func addToSummation() {
-            summation.append(selection?.dish ?? "")
+        func clearMeal() {
+            mealItems.removeAll()
+        }
+
+        /// Applies the composed meal to the treatment. Only the difference with what was applied before is added,
+        /// so manual edits of the carbs/fat/protein fields are kept and re-applying never counts a meal twice.
+        func applyMeal() {
+            let totals = mealTotals
+            carbs = max(0, carbs + totals.carbs - appliedMealTotals.carbs)
+            fat = max(0, fat + totals.fat - appliedMealTotals.fat)
+            protein = max(0, protein + totals.protein - appliedMealTotals.protein)
+            appliedMealTotals = totals
+        }
+
+        /// Keeps meal items in sync after a preset was edited.
+        func refreshMealItem(from preset: MealPresetStored) {
+            guard let index = mealItems.firstIndex(where: { $0.id == preset.objectID }) else { return }
+            mealItems[index] = MealItem(preset: preset, quantity: mealItems[index].quantity)
+        }
+
+        /// Deletes a preset from the library. A copy already in the composed meal stays there.
+        func deletePreset(_ preset: MealPresetStored) {
+            viewContext.delete(preset)
+            do {
+                guard viewContext.hasChanges else { return }
+                try viewContext.save()
+            } catch {
+                debug(.default, "\(DebuggingIdentifiers.failed) Failed to delete meal preset: \(error)")
+            }
         }
     }
 }

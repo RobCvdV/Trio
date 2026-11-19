@@ -107,6 +107,8 @@
         <attribute name="carbs" optional="YES" attributeType="Decimal" defaultValueString="0.0"/>
         <attribute name="dish" optional="YES" attributeType="String"/>
         <attribute name="fat" optional="YES" attributeType="Decimal" defaultValueString="0.0"/>
+        <attribute name="portionAmount" optional="YES" attributeType="Decimal"/>
+        <attribute name="portionUnit" optional="YES" attributeType="String"/>
         <attribute name="protein" optional="YES" attributeType="Decimal" defaultValueString="0.0"/>
     </entity>
     <entity name="OpenAPS_Battery" representedClassName="OpenAPS_Battery" syncable="YES">

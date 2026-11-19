@@ -163,6 +163,45 @@ extension Treatments {
             }
         }
 
+        /// Shows the meal composed from presets; tapping it reopens the composer to adjust it.
+        private var mealSummaryRow: some View {
+            Button {
+                showPresetSheet = true
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "fork.knife")
+                        .foregroundStyle(.blue)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Group {
+                            if state.mealItems.isEmpty {
+                                Text("Meal from presets")
+                            } else {
+                                Text(state.mealItems.map(\.dish).joined(separator: ", "))
+                            }
+                        }
+                            .font(.subheadline)
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                        if state.hasUnappliedMealChanges {
+                            Text("Meal changes not applied yet")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                        } else {
+                            Text("\(MealFormat.number(state.appliedMealTotals.carbs)) g carbs from presets")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+
         /// Determines the next field to focus on based on the current focused field.
         private func nextField(from current: FocusedField) -> FocusedField? {
             // If fat/protein fields are hidden, skip them in navigation
@@ -356,6 +395,10 @@ extension Treatments {
                             Section {
                                 carbsTextField()
                                     .id(FocusedField.carbs)
+
+                                if !state.mealItems.isEmpty || state.appliedMealTotals != .zero {
+                                    mealSummaryRow
+                                }
 
                                 if state.useFPUconversion {
                                     proteinAndFat()

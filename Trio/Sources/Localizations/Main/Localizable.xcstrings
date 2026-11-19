@@ -1089,6 +1089,385 @@
         }
       }
     },
+    "%@ g carbs" : {
+      "comment" : "Carbs of a meal preset or meal item",
+      "localizations" : {
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ g kh"
+          }
+        }
+      }
+    },
+    "%@ g carbs from presets" : {
+      "localizations" : {
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ g kh uit voorinstellingen"
+          }
+        }
+      }
+    },
+    "%@ g fat" : {
+      "comment" : "Fat of a meal preset or meal item",
+      "localizations" : {
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ g vet"
+          }
+        }
+      }
+    },
+    "%@ g protein" : {
+      "comment" : "Protein of a meal preset or meal item",
+      "localizations" : {
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ g eiwit"
+          }
+        }
+      }
+    },
+    "1 portion" : {
+      "comment" : "Meal preset without a portion size",
+      "localizations" : {
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 portie"
+          }
+        }
+      }
+    },
+    "Adds one serving to the meal" : {
+      "localizations" : {
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Voegt één portie toe aan de maaltijd"
+          }
+        }
+      }
+    },
+    "Applied to Treatment" : {
+      "localizations" : {
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Toegepast op behandeling"
+          }
+        }
+      }
+    },
+    "Apply to Treatment (%@ g)" : {
+      "localizations" : {
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Toepassen op behandeling (%@ g)"
+          }
+        }
+      }
+    },
+    "Change amount" : {
+      "localizations" : {
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hoeveelheid wijzigen"
+          }
+        }
+      }
+    },
+    "Choose Amount…" : {
+      "localizations" : {
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hoeveelheid kiezen…"
+          }
+        }
+      }
+    },
+    "Clear Meal" : {
+      "localizations" : {
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Maaltijd wissen"
+          }
+        }
+      }
+    },
+    "Clear the current meal?" : {
+      "localizations" : {
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Huidige maaltijd wissen?"
+          }
+        }
+      }
+    },
+    "Current Meal" : {
+      "localizations" : {
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Huidige maaltijd"
+          }
+        }
+      }
+    },
+    "Edit Meal Preset" : {
+      "localizations" : {
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Maaltijd voorinstelling bewerken"
+          }
+        }
+      }
+    },
+    "Edit Preset" : {
+      "localizations" : {
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Voorinstelling bewerken"
+          }
+        }
+      }
+    },
+    "Enter Amount" : {
+      "localizations" : {
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hoeveelheid invoeren"
+          }
+        }
+      }
+    },
+    "Meal changes not applied yet" : {
+      "localizations" : {
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wijzigingen in maaltijd nog niet toegepast"
+          }
+        }
+      }
+    },
+    "Meal from presets" : {
+      "localizations" : {
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Maaltijd uit voorinstellingen"
+          }
+        }
+      }
+    },
+    "ml" : {
+      "comment" : "Milliliters, unit of a meal portion",
+      "localizations" : {
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ml"
+          }
+        }
+      }
+    },
+    "No presets found." : {
+      "localizations" : {
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Geen voorinstellingen gevonden."
+          }
+        }
+      }
+    },
+    "No presets yet. Tap \"New Preset\" to create one." : {
+      "localizations" : {
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nog geen voorinstellingen. Tik op \"Nieuwe voorkeursinstelling\" om er een te maken."
+          }
+        }
+      }
+    },
+    "pcs" : {
+      "comment" : "Pieces, unit of a meal portion",
+      "localizations" : {
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "st."
+          }
+        }
+      }
+    },
+    "Per Portion" : {
+      "localizations" : {
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Per portie"
+          }
+        }
+      }
+    },
+    "Pieces" : {
+      "comment" : "Meal portion unit picker: pieces",
+      "localizations" : {
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stuks"
+          }
+        }
+      }
+    },
+    "portion" : {
+      "comment" : "A meal preset portion without a size, e.g. '1 portion'",
+      "localizations" : {
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "portie"
+          }
+        }
+      }
+    },
+    "Portion" : {
+      "comment" : "Meal portion unit picker: no size",
+      "localizations" : {
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Portie"
+          }
+        }
+      }
+    },
+    "Portion Size" : {
+      "localizations" : {
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Portiegrootte"
+          }
+        }
+      }
+    },
+    "Portions" : {
+      "localizations" : {
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Porties"
+          }
+        }
+      }
+    },
+    "Portions of %@" : {
+      "localizations" : {
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Porties van %@"
+          }
+        }
+      }
+    },
+    "Quick Choice" : {
+      "localizations" : {
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Snelkeuze"
+          }
+        }
+      }
+    },
+    "Remove from Meal" : {
+      "localizations" : {
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uit maaltijd verwijderen"
+          }
+        }
+      }
+    },
+    "Result" : {
+      "localizations" : {
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Resultaat"
+          }
+        }
+      }
+    },
+    "Search presets" : {
+      "localizations" : {
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zoek voorinstellingen"
+          }
+        }
+      }
+    },
+    "Tap to add a portion. Swipe right or long-press to choose an amount, swipe left to edit or delete." : {
+      "localizations" : {
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tik om een portie toe te voegen. Veeg naar rechts of houd ingedrukt om een hoeveelheid te kiezen, veeg naar links om te bewerken of te verwijderen."
+          }
+        }
+      }
+    },
+    "The nutrients below are per portion of %@. When using the preset you can pick a fraction or enter the eaten amount." : {
+      "localizations" : {
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "De voedingswaarden hieronder zijn per portie van %@. Bij gebruik kun je een fractie kiezen of de gegeten hoeveelheid invullen."
+          }
+        }
+      }
+    },
+    "The preset is removed from your list. Your current meal is not changed." : {
+      "localizations" : {
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "De voorinstelling wordt uit je lijst verwijderd. Je huidige maaltijd blijft ongewijzigd."
+          }
+        }
+      }
+    },
+    "Unit" : {
+      "localizations" : {
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eenheid"
+          }
+        }
+      }
+    },
     " " : {
       "localizations" : {
         "bg" : {
