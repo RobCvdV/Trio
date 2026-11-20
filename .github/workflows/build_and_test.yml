@@ -1,0 +1,274 @@
+name: Build & Test (branch)
+run-name: Build & Test (${{ github.ref_name }})
+
+# Compile check + unit tests + code coverage for a feature branch, without
+# signing, archiving or uploading to TestFlight.
+#
+# - Runs automatically on pushes to claude/** branches (quick feedback for
+#   changes made in Claude Code sessions).
+# - Can be started by hand for any branch: Actions > "Build & Test (branch)" >
+#   Run workflow, then pick the branch in "Use workflow from".
+#
+# Results are in the run's Summary: build errors, failing tests, and a coverage
+# table (per target, and per changed file compared to the base branch).
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_tests:
+        description: "Run the unit tests (off = build only)"
+        type: boolean
+        default: true
+      base_branch:
+        description: "Branch to compare against for 'changed files' coverage"
+        type: string
+        default: "rob/main"
+  push:
+    branches:
+      - "claude/**"
+    paths-ignore:
+      - "**.md"
+      - "**/README"
+      - "**.txt"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    runs-on: macos-26
+    timeout-minutes: 90
+
+    env:
+      DESTINATION: "platform=iOS Simulator,name=iPhone 17,OS=26.2"
+      RUN_TESTS: ${{ github.event_name != 'workflow_dispatch' || inputs.run_tests }}
+      BASE_BRANCH: ${{ inputs.base_branch || 'rob/main' }}
+
+    steps:
+      - name: Select Xcode version
+        run: sudo xcode-select -s /Applications/Xcode_26.2.app/Contents/Developer
+
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+          submodules: recursive
+
+      # DerivedData lives outside the checkout on purpose: the SwiftFormat build
+      # phase formats ${SRCROOT}, so build state inside it would get formatted.
+      - name: Restore DerivedData
+        id: dd-restore
+        uses: actions/cache/restore@v5
+        with:
+          path: ~/Library/Developer/Xcode/DerivedData
+          key: ${{ runner.os }}-branch-dd-${{ hashFiles('**/Package.resolved') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-branch-dd-${{ hashFiles('**/Package.resolved') }}-
+            ${{ runner.os }}-branch-dd-
+            ${{ runner.os }}-dd-
+
+      - name: Cache BuildTools (SwiftFormat)
+        uses: actions/cache@v5
+        with:
+          path: BuildTools/.build
+          key: ${{ runner.os }}-buildtools-${{ hashFiles('BuildTools/Package.swift', 'BuildTools/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-buildtools-
+
+      - name: Resolve Swift packages
+        run: |
+          set -o pipefail
+          xcodebuild -resolvePackageDependencies \
+            -workspace Trio.xcworkspace \
+            -scheme "Trio Tests" \
+            -onlyUsePackageVersionsFromResolvedFile
+
+      - name: Build for testing
+        id: build
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing \
+            -workspace Trio.xcworkspace \
+            -scheme "Trio Tests" \
+            -destination "$DESTINATION" \
+            -enableCodeCoverage YES \
+            -onlyUsePackageVersionsFromResolvedFile \
+            -disableAutomaticPackageResolution \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
+            -quiet \
+            COMPILATION_CACHE_ENABLE_CACHING=YES \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="" \
+            PROVISIONING_PROFILE_SPECIFIER="" \
+            2>&1 | tee "$RUNNER_TEMP/xcodebuild-build.log"
+
+      - name: Report build result
+        if: always()
+        run: |
+          LOG="$RUNNER_TEMP/xcodebuild-build.log"
+          if [ "${{ steps.build.outcome }}" = "success" ]; then
+            echo "## ✅ Build succeeded" >> "$GITHUB_STEP_SUMMARY"
+            WARNINGS=$(grep -E "^/.*: warning:" "$LOG" 2>/dev/null | sed "s|$GITHUB_WORKSPACE/||" | sort -u | grep -v "/Dependencies/\|/SourcePackages/" || true)
+            if [ -n "$WARNINGS" ]; then
+              {
+                echo ""
+                echo "<details><summary>Warnings in app sources ($(echo "$WARNINGS" | wc -l | tr -d ' '))</summary>"
+                echo ""
+                echo '```'
+                echo "$WARNINGS" | head -n 100
+                echo '```'
+                echo "</details>"
+              } >> "$GITHUB_STEP_SUMMARY"
+            fi
+          else
+            {
+              echo "## ❌ Build failed"
+              echo ""
+              echo '```'
+              grep -E "error:|Undefined symbol|PhaseScriptExecution failed|The following build commands failed|BUILD FAILED" "$LOG" 2>/dev/null \
+                | sed "s|$GITHUB_WORKSPACE/||" | sort -u | head -n 80 \
+                || echo "(no error lines found, see the xcodebuild-build-log artifact)"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            # Inline annotations on the offending lines
+            grep -E "^/.*:[0-9]+:[0-9]+: error:" "$LOG" 2>/dev/null | sort -u | head -n 50 | while IFS= read -r line; do
+              file=$(echo "$line" | cut -d: -f1 | sed "s|$GITHUB_WORKSPACE/||")
+              lineno=$(echo "$line" | cut -d: -f2)
+              msg=$(echo "$line" | cut -d: -f5- | sed 's/^ *//')
+              echo "::error file=$file,line=$lineno::$msg"
+            done
+          fi
+
+      - name: Upload build log
+        if: failure() && steps.build.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-build-log
+          path: ${{ runner.temp }}/xcodebuild-build.log
+          if-no-files-found: ignore
+
+      - name: Trim DerivedData before caching
+        if: always() && steps.build.outcome == 'success'
+        run: |
+          DD="$HOME/Library/Developer/Xcode/DerivedData"
+          find "$DD" -type d -name 'Logs' -prune -exec rm -rf {} + 2>/dev/null || true
+          find "$DD" -name '*.xcactivitylog' -delete 2>/dev/null || true
+          find "$DD" -type d -name 'Index.noindex' -prune -exec rm -rf {} + 2>/dev/null || true
+
+      # Save only when nothing from this branch's cache line was restored, so a
+      # branch stores one warm DerivedData instead of one per commit (the
+      # repository cache limit is 10 GB and DerivedData is several GB).
+      - name: Save DerivedData
+        if: always() && steps.build.outcome == 'success' && !startsWith(steps.dd-restore.outputs.cache-matched-key, format('{0}-branch-dd-', runner.os))
+        uses: actions/cache/save@v5
+        with:
+          path: ~/Library/Developer/Xcode/DerivedData
+          key: ${{ runner.os }}-branch-dd-${{ hashFiles('**/Package.resolved') }}-${{ github.sha }}
+
+      - name: Run tests
+        id: run_tests
+        if: env.RUN_TESTS == 'true'
+        run: |
+          set -o pipefail
+          RESULT_BUNDLE="$RUNNER_TEMP/TestResults.xcresult"
+          rm -rf "$RESULT_BUNDLE"
+          xcodebuild test-without-building \
+            -workspace Trio.xcworkspace \
+            -scheme "Trio Tests" \
+            -destination "$DESTINATION" \
+            -enableCodeCoverage YES \
+            -resultBundlePath "$RESULT_BUNDLE" \
+            -parallel-testing-enabled NO \
+            2>&1 | tee "$RUNNER_TEMP/xcodebuild-test.log"
+
+      - name: Report test results
+        if: always() && steps.run_tests.outcome != 'skipped' && steps.build.outcome == 'success'
+        run: |
+          LOG="$RUNNER_TEMP/xcodebuild-test.log"
+          TOTAL=$(grep -cE "Test [Cc]ase .* (passed|failed)" "$LOG" 2>/dev/null || true)
+          FAILED=$(grep -cE "Test [Cc]ase .* failed" "$LOG" 2>/dev/null || true)
+          if [ "${{ steps.run_tests.outcome }}" = "success" ]; then
+            echo "## ✅ Tests passed ($TOTAL test cases)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "## ❌ Tests failed ($FAILED of $TOTAL test cases)"
+              echo ""
+              echo '```'
+              grep -E "error: -\[|: error: |Test [Cc]ase .* failed|Fatal error|Testing failed:|could not be launched|Restarting after unexpected exit" "$LOG" 2>/dev/null \
+                | sed "s|$GITHUB_WORKSPACE/||" | head -n 80 \
+                || echo "(no failure lines found, see the xcodebuild-test-log artifact)"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Code coverage
+        if: always() && steps.run_tests.outcome != 'skipped' && steps.build.outcome == 'success'
+        run: |
+          RESULT_BUNDLE="$RUNNER_TEMP/TestResults.xcresult"
+          if [ ! -d "$RESULT_BUNDLE" ]; then
+            echo "No result bundle, skipping coverage." ; exit 0
+          fi
+          xcrun xccov view --report --json "$RESULT_BUNDLE" > "$RUNNER_TEMP/coverage.json" || { echo "xccov failed"; exit 0; }
+
+          # Swift files changed on this branch compared to the base branch
+          # The checkout is shallow: deepen both sides enough to find the merge base
+          git fetch --no-tags --depth=300 origin "+refs/heads/$BASE_BRANCH:refs/remotes/origin/$BASE_BRANCH" >/dev/null 2>&1 || true
+          git fetch --no-tags --deepen=300 origin "$GITHUB_REF" >/dev/null 2>&1 || true
+          MERGE_BASE=$(git merge-base HEAD "origin/$BASE_BRANCH" 2>/dev/null || true)
+          if [ -n "$MERGE_BASE" ]; then
+            git diff --name-only --diff-filter=AM "$MERGE_BASE" HEAD -- '*.swift' > "$RUNNER_TEMP/changed-files.txt"
+          else
+            : > "$RUNNER_TEMP/changed-files.txt"
+          fi
+
+          python3 - "$GITHUB_WORKSPACE" "$RUNNER_TEMP/coverage.json" "$RUNNER_TEMP/changed-files.txt" "$BASE_BRANCH" >> "$GITHUB_STEP_SUMMARY" <<'PY'
+          import json, os, sys
+          workspace, cov_path, changed_path, base = sys.argv[1:5]
+          report = json.load(open(cov_path))
+          changed = [l.strip() for l in open(changed_path) if l.strip()]
+
+          def pct(x):
+              return f"{x * 100:.1f}%"
+
+          print("## 📊 Code coverage")
+          print()
+          print("| Target | Lines covered | Coverage |")
+          print("| --- | ---: | ---: |")
+          files = {}
+          for t in sorted(report.get("targets", []), key=lambda t: t["name"]):
+              if t.get("executableLines", 0) == 0 or t["name"].endswith(".xctest"):
+                  continue
+              print(f"| {t['name']} | {t['coveredLines']}/{t['executableLines']} | {pct(t['lineCoverage'])} |")
+              for f in t.get("files", []):
+                  rel = os.path.relpath(f["path"], workspace) if f["path"].startswith(workspace) else f["path"]
+                  files[rel] = f
+          print()
+          print(f"### Changed files (vs `{base}`)")
+          print()
+          if not changed:
+              print("_No changed Swift files found._")
+          else:
+              print("| File | Lines covered | Coverage |")
+              print("| --- | ---: | ---: |")
+              for path in changed:
+                  f = files.get(path)
+                  if f is None:
+                      print(f"| `{path}` | — | not in report |")
+                  else:
+                      print(f"| `{path}` | {f['coveredLines']}/{f['executableLines']} | {pct(f['lineCoverage'])} |")
+          PY
+
+      - name: Upload test log and coverage
+        if: always() && steps.run_tests.outcome != 'skipped' && steps.build.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            ${{ runner.temp }}/xcodebuild-test.log
+            ${{ runner.temp }}/coverage.json
+          if-no-files-found: ignore
