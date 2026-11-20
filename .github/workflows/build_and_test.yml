@@ -127,7 +127,7 @@ jobs:
                 echo "$WARNINGS" | head -n 100
                 echo '```'
                 echo "</details>"
-              } >> "$GITHUB_STEP_SUMMARY"
+              } | tee -a "$GITHUB_STEP_SUMMARY"
             fi
           else
             {
@@ -138,7 +138,7 @@ jobs:
                 | sed "s|$GITHUB_WORKSPACE/||" | sort -u | head -n 80 \
                 || echo "(no error lines found, see the xcodebuild-build-log artifact)"
               echo '```'
-            } >> "$GITHUB_STEP_SUMMARY"
+            } | tee -a "$GITHUB_STEP_SUMMARY"
             # Inline annotations on the offending lines
             grep -E "^/.*:[0-9]+:[0-9]+: error:" "$LOG" 2>/dev/null | sort -u | head -n 50 | while IFS= read -r line; do
               file=$(echo "$line" | cut -d: -f1 | sed "s|$GITHUB_WORKSPACE/||")
@@ -196,6 +196,7 @@ jobs:
           LOG="$RUNNER_TEMP/xcodebuild-test.log"
           TOTAL=$(grep -cE "Test [Cc]ase .* (passed|failed)" "$LOG" 2>/dev/null || true)
           FAILED=$(grep -cE "Test [Cc]ase .* failed" "$LOG" 2>/dev/null || true)
+          echo "Test cases: $TOTAL, failed: $FAILED"
           if [ "${{ steps.run_tests.outcome }}" = "success" ]; then
             echo "## ✅ Tests passed ($TOTAL test cases)" >> "$GITHUB_STEP_SUMMARY"
           else
@@ -207,7 +208,7 @@ jobs:
                 | sed "s|$GITHUB_WORKSPACE/||" | head -n 80 \
                 || echo "(no failure lines found, see the xcodebuild-test-log artifact)"
               echo '```'
-            } >> "$GITHUB_STEP_SUMMARY"
+            } | tee -a "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Code coverage
@@ -230,7 +231,9 @@ jobs:
             : > "$RUNNER_TEMP/changed-files.txt"
           fi
 
-          python3 - "$GITHUB_WORKSPACE" "$RUNNER_TEMP/coverage.json" "$RUNNER_TEMP/changed-files.txt" "$BASE_BRANCH" >> "$GITHUB_STEP_SUMMARY" <<'PY'
+          # Written to the run summary AND the job log (the log is readable through the API)
+          python3 - "$GITHUB_WORKSPACE" "$RUNNER_TEMP/coverage.json" "$RUNNER_TEMP/changed-files.txt" "$BASE_BRANCH" \
+            > "$RUNNER_TEMP/coverage-summary.md" <<'PY'
           import json, os, sys
           workspace, cov_path, changed_path, base = sys.argv[1:5]
           report = json.load(open(cov_path))
@@ -266,6 +269,8 @@ jobs:
                   else:
                       print(f"| `{path}` | {f['coveredLines']}/{f['executableLines']} | {pct(f['lineCoverage'])} |")
           PY
+          cat "$RUNNER_TEMP/coverage-summary.md" >> "$GITHUB_STEP_SUMMARY"
+          cat "$RUNNER_TEMP/coverage-summary.md"
 
       - name: Upload test log and coverage
         if: always() && steps.run_tests.outcome != 'skipped' && steps.build.outcome == 'success'
