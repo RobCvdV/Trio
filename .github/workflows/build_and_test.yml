@@ -12,6 +12,10 @@ run-name: "Build & Test (${{ inputs.pr_number && format('PR #{0}', inputs.pr_num
 #   It then builds the PR merged into its base branch (what would land), compares
 #   coverage against that base, and reports the result on the PR as a
 #   "Build & Test" status check linking to this run.
+# - With "Deploy to TestFlight" ticked (PR runs only), a passing build is then
+#   built for release and uploaded to TestFlight, with the PR title and
+#   description as the "What to Test" notes, and a "TestFlight" status on the PR
+#   naming the build number.
 #
 # Results are in the run's Summary: build errors, failing tests, and a coverage
 # table (per target, and per changed file compared to the base branch).
@@ -27,6 +31,10 @@ on:
         description: "Run the unit tests (off = build only)"
         type: boolean
         default: true
+      testflight:
+        description: "Deploy to TestFlight after a passing build (needs a pull request number)"
+        type: boolean
+        default: false
       base_branch:
         description: "Branch to compare against for 'changed files' coverage (empty: the PR's base, or rob/main)"
         type: string
@@ -57,6 +65,9 @@ jobs:
     timeout-minutes: 90
     # Opt-in on push: macOS runner minutes are limited, so only build when asked.
     if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[build]')
+    outputs:
+      ref: ${{ steps.target.outputs.ref }}
+      head_sha: ${{ steps.target.outputs.head_sha }}
 
     env:
       DESTINATION: "platform=iOS Simulator,name=iPhone 17,OS=26.2"
@@ -399,3 +410,143 @@ jobs:
             -f state="$STATE" -f context="Build & Test" \
             -f description="$DESC" -f target_url="$RUN_URL" > /dev/null
           echo "Reported '$STATE' on PR #$PR_NUMBER"
+
+  # Release build of the same pull request, uploaded to TestFlight. Mirrors the
+  # build job of "4. Build Trio" (patches, signing, fastlane) but never syncs or
+  # pushes anything, and only runs when the build and tests above passed.
+  testflight:
+    name: TestFlight
+    needs: build-and-test
+    if: inputs.testflight && inputs.pr_number != '' && needs.build-and-test.result == 'success'
+    runs-on: macos-26
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR_NUMBER: ${{ inputs.pr_number }}
+      HEAD_SHA: ${{ needs.build-and-test.outputs.head_sha }}
+      BUILD_REF: ${{ needs.build-and-test.outputs.ref }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+    steps:
+      - name: Mark TestFlight build as pending on the pull request
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" \
+            -f state=pending -f context="TestFlight" \
+            -f description="Building for TestFlight…" -f target_url="$RUN_URL" > /dev/null
+
+      - name: Select Xcode version
+        run: "sudo xcode-select --switch /Applications/Xcode_26.5.app/Contents/Developer"
+
+      - name: Checkout pull request
+        uses: actions/checkout@v5
+        with:
+          token: ${{ secrets.GH_PAT }}
+          submodules: recursive
+          ref: ${{ needs.build-and-test.outputs.ref }}
+
+      # Same customizations as "4. Build Trio"
+      - name: Customize Trio
+        run: |
+          if $(ls ./patches/* &> /dev/null); then
+          git apply ./patches/* --allow-empty -v --whitespace=fix
+          fi
+
+      - name: Configure Dev Branch Warning
+        if: vars.DEV_BRANCH_WARNING_DISABLED == 'true'
+        run: |
+          echo 'SWIFT_ACTIVE_COMPILATION_CONDITIONS = $(inherited) DEV_BRANCH_WARNING_DISABLED' >> ConfigOverride.xcconfig
+
+      # "What to Test" notes: PR title, link and description, so the build is recognizable in TestFlight.
+      - name: Write TestFlight notes from the pull request
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" > "$RUNNER_TEMP/pr.json"
+          python3 - "$RUNNER_TEMP/pr.json" "$BUILD_REF" > "$RUNNER_TEMP/notes.txt" <<'PY'
+          import json, re, sys
+          from datetime import datetime, timezone
+          pr = json.load(open(sys.argv[1]))
+          build_ref = sys.argv[2]
+          what = (f"{pr['head']['ref']} merged into {pr['base']['ref']}" if build_ref.endswith("/merge")
+                  else f"{pr['head']['ref']} (not merged with {pr['base']['ref']})")
+          body = pr.get("body") or ""
+          body = re.sub(r"<!--.*?-->", "", body, flags=re.S)          # template comments
+          body = re.sub(r"https://claude\.ai/code/session_\S+", "", body)  # session links
+          body = re.sub(r"\n{3,}", "\n\n", body).strip()
+          header = "\n".join([
+              f"🧪 PR #{pr['number']}: {pr['title']}",
+              pr["html_url"],
+              f"Build of {what} @ {pr['head']['sha'][:8]}",
+              f"Built {datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC",
+          ])
+          notes = header + ("\n\n" + body if body else "")
+          if len(notes) > 4000:
+              notes = notes[:3990].rstrip() + "\n…"
+          print(notes)
+          PY
+          {
+            echo "TESTFLIGHT_CHANGELOG<<TESTFLIGHT_NOTES_EOF"
+            cat "$RUNNER_TEMP/notes.txt"
+            echo "TESTFLIGHT_NOTES_EOF"
+          } >> "$GITHUB_ENV"
+          echo "### TestFlight notes" >> "$GITHUB_STEP_SUMMARY"
+          { echo '```'; cat "$RUNNER_TEMP/notes.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          cat "$RUNNER_TEMP/notes.txt"
+
+      - name: Patch Match Tables
+        run: |
+          TABLE_PRINTER_PATH=$(ruby -e 'puts Gem::Specification.find_by_name("fastlane").gem_dir')/match/lib/match/table_printer.rb
+          if [ -f "$TABLE_PRINTER_PATH" ]; then
+            sed -i "" "/puts(Terminal::Table.new(params))/d" "$TABLE_PRINTER_PATH"
+          else
+            echo "table_printer.rb not found"
+            exit 1
+          fi
+
+      - name: Install Project Dependencies
+        run: bundle install
+
+      - name: Sync clock
+        run: sudo sntp -sS time.windows.com
+
+      - name: Fastlane Build & Archive
+        run: bundle exec fastlane build_trio
+        env:
+          TEAMID: ${{ secrets.TEAMID }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          FASTLANE_KEY_ID: ${{ secrets.FASTLANE_KEY_ID }}
+          FASTLANE_ISSUER_ID: ${{ secrets.FASTLANE_ISSUER_ID }}
+          FASTLANE_KEY: ${{ secrets.FASTLANE_KEY }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+
+      - name: Fastlane upload to TestFlight
+        run: bundle exec fastlane release
+        env:
+          TEAMID: ${{ secrets.TEAMID }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          FASTLANE_KEY_ID: ${{ secrets.FASTLANE_KEY_ID }}
+          FASTLANE_ISSUER_ID: ${{ secrets.FASTLANE_ISSUER_ID }}
+          FASTLANE_KEY: ${{ secrets.FASTLANE_KEY }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+
+      - name: Report TestFlight build on the pull request
+        if: always()
+        run: |
+          VERSION=$(grep -E '^APP_VERSION *=' Config.xcconfig 2>/dev/null | sed -E 's/.*= *//' || true)
+          BUILD="${VERSION:-?} (${TESTFLIGHT_BUILD_NUMBER:-?})"
+          case "${{ job.status }}" in
+            success) STATE=success; DESC="Uploaded as build $BUILD" ;;
+            cancelled) STATE=error; DESC="Cancelled" ;;
+            *) STATE=failure; DESC="TestFlight build or upload failed" ;;
+          esac
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" \
+            -f state="$STATE" -f context="TestFlight" \
+            -f description="$DESC" -f target_url="$RUN_URL" > /dev/null
+          echo "## TestFlight: $DESC" >> "$GITHUB_STEP_SUMMARY"
+          echo "TestFlight: $DESC"
+
+      - name: Upload build log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: testflight-build-log
+          path: buildlog
+          if-no-files-found: ignore

@@ -735,3 +735,115 @@ private func dec(_ string: String) -> Decimal {
         #expect(preset.portionSize?.unit == unit)
     }
 }
+
+// MARK: - Switching builds (TestFlight)
+
+/// Installing this build, going back to the main build and returning must not break the database.
+/// The main build's model is this model without the two portion fields, which is exactly what this branch adds.
+@Suite("Database: switching between this build and the main build", .serialized) @MainActor
+struct MealPresetStoreCompatibilityTests {
+    /// A copy of the app's model. Entity classes are set to NSManagedObject so this copy can be loaded next to the
+    /// app's own model in the test process; class names are not part of the version hashes Core Data migrates on.
+    private static func model(isMainBuild: Bool) -> NSManagedObjectModel {
+        let model = CoreDataStack.managedObjectModel.copy() as! NSManagedObjectModel
+        for entity in model.entities {
+            entity.managedObjectClassName = NSStringFromClass(NSManagedObject.self)
+        }
+        if isMainBuild, let preset = model.entitiesByName["MealPresetStored"] {
+            preset.properties = preset.properties.filter { !["portionAmount", "portionUnit"].contains($0.name) }
+        }
+        return model
+    }
+
+    /// Opens the store the way the app does (lightweight migration inferred automatically, history tracking on).
+    private func open(_ url: URL, with model: NSManagedObjectModel) throws -> NSPersistentContainer {
+        let container = NSPersistentContainer(name: "TrioCoreDataPersistentContainer", managedObjectModel: model)
+        let description = NSPersistentStoreDescription(url: url)
+        description.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
+        description.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
+        description.shouldMigrateStoreAutomatically = true
+        description.shouldInferMappingModelAutomatically = true
+        description.shouldAddStoreAsynchronously = false
+        container.persistentStoreDescriptions = [description]
+
+        var loadError: Error?
+        container.loadPersistentStores { _, error in loadError = error }
+        if let loadError { throw loadError }
+        return container
+    }
+
+    private func close(_ container: NSPersistentContainer) throws {
+        for store in container.persistentStoreCoordinator.persistentStores {
+            try container.persistentStoreCoordinator.remove(store)
+        }
+    }
+
+    private func insertPreset(
+        _ dish: String,
+        carbs: Decimal,
+        portion: (Decimal, String)? = nil,
+        into context: NSManagedObjectContext
+    ) {
+        let preset = NSEntityDescription.insertNewObject(forEntityName: "MealPresetStored", into: context)
+        preset.setValue(dish, forKey: "dish")
+        preset.setValue(carbs as NSDecimalNumber, forKey: "carbs")
+        if let portion {
+            preset.setValue(portion.0 as NSDecimalNumber, forKey: "portionAmount")
+            preset.setValue(portion.1, forKey: "portionUnit")
+        }
+    }
+
+    private func presets(in context: NSManagedObjectContext) throws -> [NSManagedObject] {
+        let request = NSFetchRequest<NSManagedObject>(entityName: "MealPresetStored")
+        request.sortDescriptors = [NSSortDescriptor(key: "dish", ascending: true)]
+        return try context.fetch(request)
+    }
+
+    @Test("The test models match the app's model") func modelsMatchApp() {
+        #expect(Self.model(isMainBuild: false).entityVersionHashesByName == CoreDataStack.managedObjectModel.entityVersionHashesByName)
+        #expect(
+            Self.model(isMainBuild: true).entitiesByName["MealPresetStored"]?.attributesByName.keys.sorted() ==
+                ["carbs", "dish", "fat", "protein"],
+            "The main build's preset has only these fields"
+        )
+    }
+
+    @Test("Going back to the main build and returning keeps presets and opens without errors")
+    func downgradeAndUpgrade() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let url = folder.appendingPathComponent("TrioCoreDataPersistentContainer.sqlite")
+
+        // 1. This build: presets with and without a portion size.
+        let thisBuild = try open(url, with: Self.model(isMainBuild: false))
+        insertPreset("Rice", carbs: 28, portion: (100, "g"), into: thisBuild.viewContext)
+        insertPreset("Pizza", carbs: 60, into: thisBuild.viewContext)
+        try thisBuild.viewContext.save()
+        try close(thisBuild)
+
+        // 2. Back to the main build: the store opens, presets and their carbs are intact.
+        let mainBuild = try open(url, with: Self.model(isMainBuild: true))
+        let onMain = try presets(in: mainBuild.viewContext)
+        #expect(onMain.map { $0.value(forKey: "dish") as? String } == ["Pizza", "Rice"])
+        #expect(onMain.map { ($0.value(forKey: "carbs") as? NSDecimalNumber)?.decimalValue } == [60, 28])
+        // A preset added while on the main build
+        insertPreset("Soup", carbs: 20, into: mainBuild.viewContext)
+        try mainBuild.viewContext.save()
+        try close(mainBuild)
+
+        // 3. This build again: opens without errors and has all presets. Portion sizes saved before the downgrade are
+        //    gone (the main build cannot keep fields it does not know), so those presets show as "1 portion".
+        let backAgain = try open(url, with: Self.model(isMainBuild: false))
+        let returned = try presets(in: backAgain.viewContext)
+        #expect(returned.map { $0.value(forKey: "dish") as? String } == ["Pizza", "Rice", "Soup"])
+        #expect(returned.map { ($0.value(forKey: "carbs") as? NSDecimalNumber)?.decimalValue } == [60, 28, 20])
+        #expect(returned.allSatisfy { $0.value(forKey: "portionAmount") == nil && $0.value(forKey: "portionUnit") == nil })
+
+        // Portion sizes can be set again after returning.
+        returned[1].setValue(NSDecimalNumber(value: 100), forKey: "portionAmount")
+        returned[1].setValue("g", forKey: "portionUnit")
+        try backAgain.viewContext.save()
+        try close(backAgain)
+    }
+}
