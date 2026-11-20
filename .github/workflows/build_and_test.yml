@@ -1,5 +1,5 @@
 name: Build & Test (branch)
-run-name: Build & Test (${{ github.ref_name }})
+run-name: Build & Test (${{ inputs.pr_number && format('PR #{0}', inputs.pr_number) || github.ref_name }})
 
 # Compile check + unit tests + code coverage for a feature branch, without
 # signing, archiving or uploading to TestFlight.
@@ -8,6 +8,10 @@ run-name: Build & Test (${{ github.ref_name }})
 #   contains "[build]", so it costs no runner minutes unless asked for.
 # - Can be started by hand for any branch: Actions > "Build & Test (branch)" >
 #   Run workflow, then pick the branch in "Use workflow from".
+# - Can be started by hand for a pull request: fill in "Pull request number".
+#   It then builds the PR merged into its base branch (what would land), compares
+#   coverage against that base, and reports the result on the PR as a
+#   "Build & Test" status check linking to this run.
 #
 # Results are in the run's Summary: build errors, failing tests, and a coverage
 # table (per target, and per changed file compared to the base branch).
@@ -15,14 +19,18 @@ run-name: Build & Test (${{ github.ref_name }})
 on:
   workflow_dispatch:
     inputs:
+      pr_number:
+        description: "Pull request number to build (leave empty to build the branch selected above)"
+        type: string
+        default: ""
       run_tests:
         description: "Run the unit tests (off = build only)"
         type: boolean
         default: true
       base_branch:
-        description: "Branch to compare against for 'changed files' coverage"
+        description: "Branch to compare against for 'changed files' coverage (empty: the PR's base, or rob/main)"
         type: string
-        default: "rob/main"
+        default: ""
   push:
     branches:
       - "claude/**"
@@ -34,8 +42,13 @@ on:
 
 # A push without "[build]" must not cancel a run that is still going.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ inputs.pr_number && format('pr-{0}', inputs.pr_number) || github.ref }}
   cancel-in-progress: false
+
+permissions:
+  contents: read
+  pull-requests: read
+  statuses: write # to report the result on a pull request
 
 jobs:
   build-and-test:
@@ -48,15 +61,61 @@ jobs:
     env:
       DESTINATION: "platform=iOS Simulator,name=iPhone 17,OS=26.2"
       RUN_TESTS: ${{ github.event_name != 'workflow_dispatch' || inputs.run_tests }}
-      BASE_BRANCH: ${{ inputs.base_branch || 'rob/main' }}
+      PR_NUMBER: ${{ inputs.pr_number }}
+      GH_TOKEN: ${{ github.token }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
     steps:
+      # For a PR: build its merge with the base branch (falls back to the PR head
+      # when GitHub has no merge commit, e.g. on conflicts) and mark it pending.
+      - name: Resolve what to build
+        id: target
+        env:
+          INPUT_BASE_BRANCH: ${{ inputs.base_branch }}
+        run: |
+          if [ -n "$PR_NUMBER" ]; then
+            case "$PR_NUMBER" in
+              *[!0-9]*) echo "::error::Pull request number must be a number, got '$PR_NUMBER'"; exit 1 ;;
+            esac
+            # GitHub computes mergeability lazily; ask a few times before giving up on the merge ref.
+            for attempt in 1 2 3 4 5; do
+              PR_JSON=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER")
+              MERGEABLE=$(echo "$PR_JSON" | jq -r '.mergeable')
+              [ "$MERGEABLE" != "null" ] && break
+              sleep 3
+            done
+            HEAD_SHA=$(echo "$PR_JSON" | jq -r '.head.sha')
+            BASE=$(echo "$PR_JSON" | jq -r '.base.ref')
+            if [ "$MERGEABLE" = "true" ]; then
+              REF="refs/pull/$PR_NUMBER/merge"
+              WHAT="PR #$PR_NUMBER merged into $BASE"
+            else
+              REF="$HEAD_SHA"
+              WHAT="PR #$PR_NUMBER head (no clean merge with $BASE: mergeable=$MERGEABLE)"
+            fi
+            echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+            gh api "repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" \
+              -f state=pending -f context="Build & Test" \
+              -f description="Building and testing…" -f target_url="$RUN_URL" > /dev/null
+          else
+            REF="$GITHUB_SHA"
+            BASE=""
+            WHAT="$GITHUB_REF_NAME @ ${GITHUB_SHA:0:8}"
+          fi
+          COMPARE="${INPUT_BASE_BRANCH:-${BASE:-rob/main}}"
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "BASE_BRANCH=$COMPARE" >> "$GITHUB_ENV"
+          echo "CHECKOUT_REF=$REF" >> "$GITHUB_ENV"
+          echo "Building: $WHAT (coverage compared to $COMPARE)"
+          echo "### Building $WHAT" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Select Xcode version
         run: sudo xcode-select -s /Applications/Xcode_26.2.app/Contents/Developer
 
       - name: Checkout code
         uses: actions/checkout@v5
         with:
+          ref: ${{ steps.target.outputs.ref }}
           fetch-depth: 1
           submodules: recursive
 
@@ -243,7 +302,7 @@ jobs:
           # Swift files changed on this branch compared to the base branch
           # The checkout is shallow: deepen both sides enough to find the merge base
           git fetch --no-tags --depth=300 origin "+refs/heads/$BASE_BRANCH:refs/remotes/origin/$BASE_BRANCH" >/dev/null 2>&1 || true
-          git fetch --no-tags --deepen=300 origin "$GITHUB_REF" >/dev/null 2>&1 || true
+          git fetch --no-tags --deepen=300 origin "$CHECKOUT_REF" >/dev/null 2>&1 || true
           MERGE_BASE=$(git merge-base HEAD "origin/$BASE_BRANCH" 2>/dev/null || true)
           if [ -n "$MERGE_BASE" ]; then
             git diff --name-only --diff-filter=AM "$MERGE_BASE" HEAD -- '*.swift' > "$RUNNER_TEMP/changed-files.txt"
@@ -324,3 +383,19 @@ jobs:
             ${{ runner.temp }}/xcodebuild-test.log
             ${{ runner.temp }}/coverage.json
           if-no-files-found: ignore
+
+      - name: Report result on the pull request
+        if: always() && steps.target.outputs.head_sha != ''
+        run: |
+          case "${{ job.status }}" in
+            success) STATE=success; DESC="Build and tests passed" ;;
+            cancelled) STATE=error; DESC="Run was cancelled" ;;
+            *)
+              STATE=failure
+              if [ "${{ steps.build.outcome }}" != "success" ]; then DESC="Build failed"; else DESC="Tests failed"; fi
+              ;;
+          esac
+          gh api "repos/$GITHUB_REPOSITORY/statuses/${{ steps.target.outputs.head_sha }}" \
+            -f state="$STATE" -f context="Build & Test" \
+            -f description="$DESC" -f target_url="$RUN_URL" > /dev/null
+          echo "Reported '$STATE' on PR #$PR_NUMBER"
