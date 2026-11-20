@@ -745,10 +745,17 @@ extension Treatments {
                 }
             }
             return MealTotals(
-                carbs: sum.carbs.rounded(scale: 0),
-                fat: sum.fat.rounded(scale: 0),
-                protein: sum.protein.rounded(scale: 0)
+                carbs: wholeGrams(sum.carbs),
+                fat: wholeGrams(sum.fat),
+                protein: wholeGrams(sum.protein)
             )
+        }
+
+        /// Rounds to whole grams and returns a canonical `Decimal`. Rounding alone can leave an internal
+        /// representation like "86.0", which Foundation's `Decimal ==` may not treat as equal to 86; that would
+        /// make `hasUnappliedMealChanges` report changes after e.g. going from 1 portion to ½ and back to 1.
+        private func wholeGrams(_ value: Decimal) -> Decimal {
+            Decimal(NSDecimalNumber(decimal: value.rounded(scale: 0)).intValue)
         }
 
         /// Whether the composed meal differs from what was last applied to the treatment.

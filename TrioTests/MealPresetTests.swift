@@ -266,7 +266,7 @@ private func dec(_ string: String) -> Decimal {
         state.addPortion(of: apple)
 
         #expect(state.mealItems.map(\.dish) == ["Rice", "Pizza", "Apple"], "Items stay in the order they were added")
-        #expect(state.mealTotals.carbs == 42 + 30 + 14)
+        #expect(state.mealTotals.carbs == 86) // 42 (rice) + 30 (half pizza) + 14 (apple)
         #expect(state.mealTotals.fat == 0, "Fat and protein are not counted while their entry is off")
         #expect(state.mealTotals.protein == 0)
     }
@@ -484,6 +484,24 @@ private func dec(_ string: String) -> Decimal {
         state.applyMeal()
 
         #expect(state.carbs == 60, "Not 90: the first half was already counted")
+    }
+
+    @Test("Going from 1 to ½ and back to 1 portion is not reported as an unapplied change") func backToAppliedAmount() async throws {
+        let fixture = try await MealFixture()
+        let pizza = try fixture.pizza()
+        let rice = try fixture.rice()
+        let state = makeState()
+        state.setMealQuantity(1, for: pizza.objectID, preset: pizza) // quick choice "1×"
+        state.setMealQuantity(rice.portionAmount!.decimalValue / 100, for: rice.objectID, preset: rice) // typed "100 g"
+        state.applyMeal()
+
+        state.setMealQuantity(dec("0.5"), for: pizza.objectID)
+        state.addPortion(to: pizza.objectID) // "+" rounds ½ up to 1 again
+        state.setMealQuantity(dec("1.50"), for: rice.objectID)
+        state.setMealQuantity(MealItem(preset: rice, quantity: 1).quantity(forAmount: 100), for: rice.objectID)
+
+        #expect(state.mealTotals == state.appliedMealTotals)
+        #expect(!state.hasUnappliedMealChanges)
     }
 
     @Test("Applying again without changes does not count the meal twice") func applyIsIdempotent() async throws {

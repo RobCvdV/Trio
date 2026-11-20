@@ -194,21 +194,41 @@ jobs:
         if: always() && steps.run_tests.outcome != 'skipped' && steps.build.outcome == 'success'
         run: |
           LOG="$RUNNER_TEMP/xcodebuild-test.log"
-          TOTAL=$(grep -cE "Test [Cc]ase .* (passed|failed)" "$LOG" 2>/dev/null || true)
-          FAILED=$(grep -cE "Test [Cc]ase .* failed" "$LOG" 2>/dev/null || true)
-          echo "Test cases: $TOTAL, failed: $FAILED"
+          # Swift Testing prints a final "Test run with N tests in M suites passed/failed ..." line;
+          # XCTest prints "Executed N tests, with M failures".
+          SWIFT_TESTING=$(grep -E "Test run with [0-9]+ tests" "$LOG" 2>/dev/null | tail -n 1 | sed -E 's/^[^ ]+ //' || true)
+          XCTEST=$(grep -E "Executed [0-9]+ tests?, with [0-9]+ failures?" "$LOG" 2>/dev/null | tail -n 1 | sed -E 's/^.*(Executed)/\1/' || true)
+          echo "Swift Testing: ${SWIFT_TESTING:-n/a}"
+          echo "XCTest: ${XCTEST:-n/a}"
           if [ "${{ steps.run_tests.outcome }}" = "success" ]; then
-            echo "## ✅ Tests passed ($TOTAL test cases)" >> "$GITHUB_STEP_SUMMARY"
+            {
+              echo "## ✅ Tests passed"
+              echo ""
+              echo "- Swift Testing: ${SWIFT_TESTING:-n/a}"
+              echo "- XCTest: ${XCTEST:-n/a}"
+            } >> "$GITHUB_STEP_SUMMARY"
           else
             {
-              echo "## ❌ Tests failed ($FAILED of $TOTAL test cases)"
+              echo "## ❌ Tests failed"
+              echo ""
+              echo "- Swift Testing: ${SWIFT_TESTING:-n/a}"
+              echo "- XCTest: ${XCTEST:-n/a}"
               echo ""
               echo '```'
-              grep -E "error: -\[|: error: |Test [Cc]ase .* failed|Fatal error|Testing failed:|could not be launched|Restarting after unexpected exit" "$LOG" 2>/dev/null \
-                | sed "s|$GITHUB_WORKSPACE/||" | head -n 80 \
-                || echo "(no failure lines found, see the xcodebuild-test-log artifact)"
+              # Swift Testing issues (✘ ... recorded an issue at File.swift:line: ...) and XCTest failures
+              grep -E "✘ Test .*recorded an issue|✘ Test .*failed|error: -\[.*\] : |Fatal error|Testing failed:|could not be launched|Restarting after unexpected exit" "$LOG" 2>/dev/null \
+                | grep -v "36;1m" | sed -E 's/^[0-9T:.-]+Z //' | sed "s|$GITHUB_WORKSPACE/||" | head -n 80 \
+                || echo "(no failure lines found, see the test-results artifact)"
               echo '```'
             } | tee -a "$GITHUB_STEP_SUMMARY"
+            # Inline annotations for Swift Testing issues
+            grep -oE "recorded an issue at [A-Za-z0-9_+]+\.swift:[0-9]+:[0-9]+: .*" "$LOG" 2>/dev/null | head -n 30 | while IFS= read -r line; do
+              file=$(echo "$line" | sed -E 's/recorded an issue at ([^:]+):.*/\1/')
+              lineno=$(echo "$line" | sed -E 's/recorded an issue at [^:]+:([0-9]+):.*/\1/')
+              msg=$(echo "$line" | sed -E 's/recorded an issue at [^:]+:[0-9]+:[0-9]+: //')
+              path=$(git ls-files "*/$file" "$file" | head -n 1)
+              echo "::error file=${path:-$file},line=$lineno::$msg"
+            done
           fi
 
       - name: Code coverage
@@ -268,6 +288,29 @@ jobs:
                       print(f"| `{path}` | — | not in report |")
                   else:
                       print(f"| `{path}` | {f['coveredLines']}/{f['executableLines']} | {pct(f['lineCoverage'])} |")
+
+          # Per function, so logic coverage is visible next to (untestable) SwiftUI view bodies
+          detail = []
+          for path in changed:
+              f = files.get(path)
+              if not f or not f.get("functions"):
+                  continue
+              detail.append(f"#### `{path}`")
+              detail.append("")
+              detail.append("| Function | Lines covered | Coverage |")
+              detail.append("| --- | ---: | ---: |")
+              for fn in sorted(f["functions"], key=lambda fn: fn.get("lineNumber", 0)):
+                  if fn.get("executableLines", 0) == 0:
+                      continue
+                  name = fn["name"].replace("|", "\\|")
+                  detail.append(f"| `{name}` (line {fn.get('lineNumber', '?')}) | {fn['coveredLines']}/{fn['executableLines']} | {pct(fn['lineCoverage'])} |")
+              detail.append("")
+          if detail:
+              print()
+              print("<details><summary>Coverage per function in changed files</summary>")
+              print()
+              print("\n".join(detail))
+              print("</details>")
           PY
           cat "$RUNNER_TEMP/coverage-summary.md" >> "$GITHUB_STEP_SUMMARY"
           cat "$RUNNER_TEMP/coverage-summary.md"
