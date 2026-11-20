@@ -4,8 +4,8 @@ run-name: Build & Test (${{ github.ref_name }})
 # Compile check + unit tests + code coverage for a feature branch, without
 # signing, archiving or uploading to TestFlight.
 #
-# - Runs automatically on pushes to claude/** branches (quick feedback for
-#   changes made in Claude Code sessions).
+# - On pushes to claude/** branches it only runs when the head commit message
+#   contains "[build]", so it costs no runner minutes unless asked for.
 # - Can be started by hand for any branch: Actions > "Build & Test (branch)" >
 #   Run workflow, then pick the branch in "Use workflow from".
 #
@@ -30,16 +30,20 @@ on:
       - "**.md"
       - "**/README"
       - "**.txt"
+      - "**.xcstrings"
 
+# A push without "[build]" must not cancel a run that is still going.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build-and-test:
     name: Build & Test
     runs-on: macos-26
     timeout-minutes: 90
+    # Opt-in on push: macOS runner minutes are limited, so only build when asked.
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[build]')
 
     env:
       DESTINATION: "platform=iOS Simulator,name=iPhone 17,OS=26.2"
