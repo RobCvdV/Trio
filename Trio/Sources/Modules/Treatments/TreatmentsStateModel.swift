@@ -822,10 +822,11 @@ extension Treatments {
 
         /// Deletes a preset from the library. A copy already in the composed meal stays there.
         func deletePreset(_ preset: MealPresetStored) {
-            viewContext.delete(preset)
+            guard let context = preset.managedObjectContext else { return }
+            context.delete(preset)
             do {
-                guard viewContext.hasChanges else { return }
-                try viewContext.save()
+                guard context.hasChanges else { return }
+                try context.save()
             } catch {
                 debug(.default, "\(DebuggingIdentifiers.failed) Failed to delete meal preset: \(error)")
             }

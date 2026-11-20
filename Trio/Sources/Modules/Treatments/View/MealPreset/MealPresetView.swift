@@ -65,6 +65,13 @@ struct MealItem: Identifiable, Equatable {
 
     /// Eaten amount in the portion's unit (e.g. 150 g), `nil` for presets without a portion size.
     var amount: Decimal? { portionAmount.map { $0 * quantity } }
+
+    /// Number of portions for an entered amount: in the portion's unit when the preset has a size
+    /// (150 g of a 100 g portion is 1.5), otherwise the amount already is a number of portions.
+    func quantity(forAmount amount: Decimal) -> Decimal {
+        guard let portionAmount, portionAmount > 0 else { return amount }
+        return amount / portionAmount
+    }
 }
 
 struct MealTotals: Equatable {
@@ -546,16 +553,14 @@ struct MealQuantityEditor: View {
     private var hasPortionSize: Bool { item.portionAmount != nil }
 
     private var amountBinding: Binding<Decimal> {
-        if let portionAmount = item.portionAmount {
-            return Binding(
-                get: { amount },
-                set: { newValue in
-                    amount = newValue
-                    quantity = newValue / portionAmount
-                }
-            )
-        }
-        return $quantity
+        guard hasPortionSize else { return $quantity }
+        return Binding(
+            get: { amount },
+            set: { newValue in
+                amount = newValue
+                quantity = item.quantity(forAmount: newValue)
+            }
+        )
     }
 
     var body: some View {
