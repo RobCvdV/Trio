@@ -1185,12 +1185,21 @@ extension SettingsExport {
                         let request: NSFetchRequest<MealPresetStored> = MealPresetStored.fetchRequest()
                         let mealPresets = try self.viewContext.fetch(request)
 
-                        return mealPresets.map { preset -> (dish: String, carbs: Decimal?, fat: Decimal?, protein: Decimal?) in
+                        return mealPresets.map { preset -> (
+                            dish: String,
+                            carbs: Decimal?,
+                            fat: Decimal?,
+                            protein: Decimal?,
+                            portionAmount: Decimal?,
+                            portionUnit: String?
+                        ) in
                             (
                                 dish: preset.dish ?? "Unknown Meal",
                                 carbs: preset.carbs?.decimalValue,
                                 fat: preset.fat?.decimalValue,
-                                protein: preset.protein?.decimalValue
+                                protein: preset.protein?.decimalValue,
+                                portionAmount: preset.portionAmount?.decimalValue,
+                                portionUnit: preset.portionUnit
                             )
                         }
                     }
@@ -1199,6 +1208,16 @@ extension SettingsExport {
 
                     if !mealPresetData.isEmpty {
                         for mealPreset in mealPresetData {
+                            if let portionAmount = mealPreset.portionAmount, portionAmount > 0 {
+                                addSetting(
+                                    category: presetsCategory,
+                                    subcategory: mealPreset.dish,
+                                    name: "Portion",
+                                    value: String(describing: portionAmount),
+                                    unit: mealPreset.portionUnit ?? ""
+                                )
+                            }
+
                             if let carbs = mealPreset.carbs, carbs > 0 {
                                 addSetting(
                                     category: presetsCategory,

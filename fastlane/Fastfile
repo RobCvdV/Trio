@@ -74,6 +74,11 @@ platform :ios do
 
     current_build_number = previous_build_number + 1
 
+    # Let later workflow steps know which TestFlight build this is (e.g. to report it on a pull request).
+    if ENV["GITHUB_ENV"]
+      File.open(ENV["GITHUB_ENV"], "a") { |f| f.puts("TESTFLIGHT_BUILD_NUMBER=#{current_build_number}") }
+    end
+
     increment_build_number(
       xcodeproj: "#{GITHUB_WORKSPACE}/Trio.xcodeproj",
       build_number: current_build_number
@@ -155,6 +160,11 @@ platform :ios do
       "commit #{commit[:abbreviated_commit_hash]}",
       commit[:message].to_s.lines.first.to_s.strip
     ].reject(&:empty?).join("\n")
+
+    # A pull request build passes its own notes (PR title and description) so the build can be recognized
+    # in TestFlight. App Store Connect allows at most 4000 characters of "What to Test".
+    custom_changelog = ENV["TESTFLIGHT_CHANGELOG"].to_s.strip
+    changelog = custom_changelog[0, 4000] unless custom_changelog.empty?
 
     # Must wait for processing, otherwise App Store Connect has no build to attach the
     # changelog to and the "What to Test" notes are silently dropped.
