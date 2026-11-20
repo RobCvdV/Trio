@@ -1,5 +1,5 @@
 name: Build & Test (branch)
-run-name: Build & Test (${{ inputs.pr_number && format('PR #{0}', inputs.pr_number) || github.ref_name }})
+run-name: "Build & Test (${{ inputs.pr_number && format('PR #{0}', inputs.pr_number) || github.ref_name }})"
 
 # Compile check + unit tests + code coverage for a feature branch, without
 # signing, archiving or uploading to TestFlight.
